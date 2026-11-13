@@ -36,8 +36,24 @@ def test_startup_token_is_hidden_unless_requested():
     assert "Bearer token: test-admin-token" in visible_output.getvalue()
 
 
+def test_vault_monitor_stops_on_shutdown():
+    """The resident watcher must not outlive its app (the launcher rebuilds per Vault)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        vault = Path(tmp) / "vault"
+        profile.init(str(vault))
+        app = create_app(vault, token="monitor-token", watch=True)
+        monitor = app.state.vault_monitor
+        thread = monitor._thread
+        assert thread is not None and thread.is_alive()
+        with TestClient(app):
+            pass
+        assert monitor._stop.is_set()
+        assert thread is not None and not thread.is_alive()
+
+
 def main():
     test_startup_token_is_hidden_unless_requested()
+    test_vault_monitor_stops_on_shutdown()
     with tempfile.TemporaryDirectory() as tmp:
         vault = Path(tmp) / "vault"
         profile.init(str(vault))
