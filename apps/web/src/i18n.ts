@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 export type Language = 'zh-CN' | 'en'
 
@@ -77,6 +77,58 @@ const resources: Record<Language, Record<string, string>> = {
     'external.banner': '检测到外部修改（例如 Obsidian 编辑）。本地数据已变化，请刷新后核对；系统不会自动覆盖你的编辑。',
     'external.refresh': '刷新数据',
     'external.dismiss': '稍后处理',
+    'overview.timeUnknown': '时间未知',
+    'overview.access.allowed': '完整可见',
+    'overview.access.summaryOnly': '仅摘要',
+    'overview.access.localOnly': '仅本地',
+    'overview.access.denied': '已保护',
+    'overview.noAiAccess': '尚无 AI 访问记录',
+    'overview.next.review': '审核候选记忆',
+    'overview.next.reviewDetail': '{count} 条内容等待你的判断，确认后才进入正式档案。',
+    'overview.next.profile': '查看个人档案',
+    'overview.next.profileEmptyDetail': '档案目前为空，可在个人档案中查看完善建议。',
+    'overview.next.reflection': '完成本月复盘',
+    'overview.next.reflectionDetail': '整理这个月发生了什么，并写下下一步。',
+    'overview.next.profileDetail': '档案已确认信息保持最新，随时核对。',
+    'overview.loading': '正在读取本地总览…',
+    'overview.loadError': '无法加载总览',
+    'overview.title': '总览',
+    'overview.reading': '正在读取本地档案。',
+    'overview.spaceName': '我的个人空间',
+    'overview.welcome': '欢迎回到你的个人空间',
+    'overview.welcomeDetail': '这里汇总你的档案、记忆、连接与成长状态。所有内容只保存在本机，并由你确认后才算数。',
+    'overview.nextTitle': '下一步',
+    'overview.nextLabel': '推荐下一步',
+    'overview.profileTitle': '已确认的个人信息',
+    'overview.profileLabel': '已确认的个人信息',
+    'overview.viewProfile': '查看档案',
+    'overview.profileEmptyTitle': '档案还是空的',
+    'overview.profileEmptyDetail': '只有经过审核确认的信息才会显示在这里。当前档案访问等级：{level}。',
+    'overview.viewProfileAction': '查看个人档案',
+    'overview.activityTitle': '最近的记忆变化',
+    'overview.activityLabel': '最近的记忆变化',
+    'overview.reviewAction': '记忆审核',
+    'overview.noConfirmedTitle': '还没有已确认的记忆',
+    'overview.noConfirmedDetail': '当前有 {candidate} 条候选、{pending} 条待处理。',
+    'overview.clientsTitle': '已授权的 AI 工具',
+    'overview.clientsLabel': '已授权的 AI 工具',
+    'overview.manageAccess': '管理授权',
+    'overview.noClientsTitle': '还没有 AI 获得授权',
+    'overview.noClientsDetail': '你可以在「AI 连接」里为具体客户端设置最小权限。',
+    'overview.recentAccess': '最近访问：{summary}。',
+    'overview.viewConnections': '查看 AI 连接',
+    'overview.scopesAndActivity': '{count} 项权限 · {activity}',
+    'overview.recentlyActive': '最近活跃',
+    'overview.notConnected': '尚未连接',
+    'overview.vaultTitle': '本地文件与备份',
+    'overview.vaultLabel': '本地文件与备份',
+    'overview.backupCount': '备份数量',
+    'overview.latestBackup': '最近备份',
+    'overview.noBackup': '尚无备份',
+    'overview.externalChangeLabel': '外部修改',
+    'overview.externalDetected': '检测到，待核对',
+    'overview.externalNone': '未检测到',
+    'overview.latestReflection': '最近一次月度复盘：{month}',
   },
   en: {
     'app.title': 'NEXORA',
@@ -143,6 +195,58 @@ const resources: Record<Language, Record<string, string>> = {
     'external.banner': 'External changes detected (for example an Obsidian edit). Your local data changed — refresh to review. The system never overwrites your edits automatically.',
     'external.refresh': 'Refresh data',
     'external.dismiss': 'Later',
+    'overview.timeUnknown': 'Unknown time',
+    'overview.access.allowed': 'Fully visible',
+    'overview.access.summaryOnly': 'Summary only',
+    'overview.access.localOnly': 'Local only',
+    'overview.access.denied': 'Protected',
+    'overview.noAiAccess': 'No AI access yet',
+    'overview.next.review': 'Review candidate memories',
+    'overview.next.reviewDetail': '{count} items are waiting for your decision; they become part of the profile only after you confirm them.',
+    'overview.next.profile': 'Open profile',
+    'overview.next.profileEmptyDetail': 'The profile is empty — open it to see suggestions.',
+    'overview.next.reflection': 'Finish this month’s reflection',
+    'overview.next.reflectionDetail': 'Review what happened this month and write down the next step.',
+    'overview.next.profileDetail': 'Your confirmed profile stays up to date — review it anytime.',
+    'overview.loading': 'Reading the local overview…',
+    'overview.loadError': 'Could not load the overview',
+    'overview.title': 'Overview',
+    'overview.reading': 'Reading the local profile.',
+    'overview.spaceName': 'My space',
+    'overview.welcome': 'Welcome back to your space',
+    'overview.welcomeDetail': 'This page summarises your profile, memories, connections and growth. Everything stays on this machine and only counts once you confirm it.',
+    'overview.nextTitle': 'Next step',
+    'overview.nextLabel': 'Recommended next step',
+    'overview.profileTitle': 'Confirmed profile facts',
+    'overview.profileLabel': 'Confirmed profile facts',
+    'overview.viewProfile': 'Open profile',
+    'overview.profileEmptyTitle': 'The profile is still empty',
+    'overview.profileEmptyDetail': 'Only reviewed and confirmed facts appear here. Current access level: {level}.',
+    'overview.viewProfileAction': 'Open profile',
+    'overview.activityTitle': 'Recent memory changes',
+    'overview.activityLabel': 'Recent memory changes',
+    'overview.reviewAction': 'Memory review',
+    'overview.noConfirmedTitle': 'No confirmed memories yet',
+    'overview.noConfirmedDetail': '{candidate} candidates and {pending} items awaiting review.',
+    'overview.clientsTitle': 'Authorized AI tools',
+    'overview.clientsLabel': 'Authorized AI tools',
+    'overview.manageAccess': 'Manage access',
+    'overview.noClientsTitle': 'No AI is authorized yet',
+    'overview.noClientsDetail': 'You can grant least-privilege scopes to individual clients in “AI Connections”.',
+    'overview.recentAccess': 'Last access: {summary}.',
+    'overview.viewConnections': 'Open AI Connections',
+    'overview.scopesAndActivity': '{count} scopes · {activity}',
+    'overview.recentlyActive': 'Recently active',
+    'overview.notConnected': 'Never connected',
+    'overview.vaultTitle': 'Local files & backups',
+    'overview.vaultLabel': 'Local files & backups',
+    'overview.backupCount': 'Backups',
+    'overview.latestBackup': 'Latest backup',
+    'overview.noBackup': 'No backups yet',
+    'overview.externalChangeLabel': 'External changes',
+    'overview.externalDetected': 'Detected — review',
+    'overview.externalNone': 'None detected',
+    'overview.latestReflection': 'Latest monthly reflection: {month}',
   },
 }
 
@@ -166,8 +270,14 @@ export function setLanguage(next: Language): void {
   listeners.forEach((listener) => listener())
 }
 
-export function translate(key: string, language: Language = current): string {
-  return resources[language][key] ?? resources['zh-CN'][key] ?? key
+export function translate(key: string, language: Language = current, vars?: Record<string, string | number>): string {
+  let text = resources[language][key] ?? resources['zh-CN'][key] ?? key
+  if (vars) {
+    for (const [name, value] of Object.entries(vars)) {
+      text = text.replaceAll(`{${name}}`, String(value))
+    }
+  }
+  return text
 }
 
 export function useLanguage(): [Language, (next: Language) => void] {
@@ -180,9 +290,13 @@ export function useLanguage(): [Language, (next: Language) => void] {
   return [language, setLanguage]
 }
 
-export function useT(): (key: string) => string {
+export function useT(): (key: string, vars?: Record<string, string | number>) => string {
   const [language] = useLanguage()
-  return (key: string) => translate(key, language)
+  // Stable per language, so callers can safely use `t` in effect/memo deps.
+  return useCallback(
+    (key: string, vars?: Record<string, string | number>) => translate(key, language, vars),
+    [language],
+  )
 }
 
 /** Locale-aware date formatting; falls back to the raw value. */
