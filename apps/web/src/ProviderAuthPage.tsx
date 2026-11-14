@@ -178,7 +178,7 @@ export default function ProviderAuthPage({ client }: Props) {
         <div><strong>{item.provider}</strong><small>{item.scope} · {Object.keys(item.payload).join(', ') || t('provider.empty')}</small></div>
         <button className="primary-action" onClick={() => void callApproved(item)} disabled={Boolean(calling) || !adapters?.configured.some((config) => config.provider === item.provider)}>{calling === item.requestId ? t('provider.calling') : t('provider.call')}</button>
       </li>)}</ul>}
-      {callResult && <div className={`backup-message ${callResult.ok ? 'success' : 'error'}`} role="status">{callResult.ok ? <CheckCircle /> : <Warning />}<span>{callResult.ok ? t('provider.callResult', { model: callResult.model ?? 'Provider', text: callResult.text }) : t('provider.callError', { error: callResult.error })}</span></div>}
+      {callResult && <div className={`backup-message ${callResult.ok ? 'success' : 'error'}`} role="status">{callResult.ok ? <CheckCircle /> : <Warning />}<span>{callResult.ok ? t('provider.callResult', { model: callResult.model ?? 'Provider', text: callResult.text ?? '' }) : t('provider.callError', { error: callResult.error ?? '' })}</span></div>}
       <small>{t('provider.callNote')}</small>
     </section>
 
