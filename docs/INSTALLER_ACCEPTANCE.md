@@ -1,6 +1,6 @@
 # Windows Installer Acceptance
 
-状态：**未执行；验收模板已建立**  
+状态：**未执行；验收模板已建立**
 数据边界：仅使用临时合成 Vault，不使用真实用户 Vault。
 
 ## 测试环境记录

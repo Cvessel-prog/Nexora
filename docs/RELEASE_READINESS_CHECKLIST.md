@@ -1,6 +1,6 @@
 # Release Readiness Checklist
 
-状态：**Not ready — planning baseline**  
+状态：**Not ready — planning baseline**
 判定规则：只有当前候选提交、真实环境和可追溯证据才能勾选；历史报告不能自动继承为通过。
 
 ## 发布前必须完成（P0）

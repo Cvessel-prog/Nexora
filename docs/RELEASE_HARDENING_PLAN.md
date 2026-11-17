@@ -1,7 +1,7 @@
 # NEXORA v1.0.4 Release Hardening Plan
 
-状态：**计划已建立，执行待人工确认**  
-基线：`main@8862bd5`，2026-11-17，Windows 本地工作区干净并与 `origin/main` 一致  
+状态：**计划已建立，执行待人工确认**
+基线：`main@8862bd5`，2026-11-17，Windows 本地工作区干净并与 `origin/main` 一致
 目标：为“可靠稳定版”建立可重复、可审计的真实环境证据；本阶段不开发 NEXORA v1.1 功能。
 
 ## 执行规则
@@ -30,7 +30,7 @@ R5 MCP protocol simulation ──> R5 real-host matrix ──────┘
 
 ## R1 — Windows Security Validation
 
-状态：`未开始`  
+状态：`未开始`
 环境：Windows 11/Windows Server；NTFS；至少两个非管理员本地用户；Python 源码运行与安装版各一轮。
 
 ### 判据与命令
@@ -52,7 +52,7 @@ R5 MCP protocol simulation ──> R5 real-host matrix ──────┘
 
 ## R2 — Windows Installer Validation
 
-状态：`未开始，依赖 R1 判据`  
+状态：`未开始，依赖 R1 判据`
 环境：干净 Windows 11 VM 快照、普通用户、无预装 Python/Node；另准备 v1.0.4 和候选安装包及 SHA-256。
 
 执行顺序：快照→全新安装→首次启动→合成 Vault→Web/API→关闭→重启→升级→数据一致性→卸载→数据保留→重装恢复→损坏/中断安装恢复。
@@ -63,7 +63,7 @@ R5 MCP protocol simulation ──> R5 real-host matrix ──────┘
 
 ## R3 — Playwright E2E
 
-状态：`待本机复验；CI 当前通过`  
+状态：`待本机复验；CI 当前通过`
 已知事实：`@playwright/test 1.65.0`；Chromium 由 `npx playwright install --with-deps chromium` 安装；测试服务器为 `tests/e2e_web_server.py`，固定 `127.0.0.1:8766`，单 worker，无显式 Playwright timeout 覆盖。
 
 调查顺序：
