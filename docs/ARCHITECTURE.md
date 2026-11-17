@@ -1,6 +1,6 @@
 # NEXORA Architecture
 
-审计基线：`main@aa30f3a`（2026-11-17 读取）。本图只画当前代码存在的路径。
+审计基线：`main@8862bd5`（2026-11-17 复核）。本图只画当前代码存在的路径。
 
 ```text
 React 19 + TypeScript + Vite (primary UI)
