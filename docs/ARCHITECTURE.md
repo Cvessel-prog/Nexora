@@ -1,26 +1,53 @@
-# Architecture
+# NEXORA Architecture
+
+审计基线：`main@aa30f3a`（2026-11-17 读取）。本图只画当前代码存在的路径。
 
 ```text
-Local CLI (profile.py) --------\
-Local Review UI (review_app.py) -\
-Local HTTP API (apps/api) --------> core.profile / core.access ---> Private Obsidian Vault
-AI Clients -> MCP adapter -------/             |
-                                      Markdown is source of truth
+React 19 + TypeScript + Vite (primary UI)
+       │ loopback JSON + in-memory bearer token
+       ▼
+FastAPI apps/api/main.py ─────────── Windows launcher.py / packaged static SPA
+       │
+       ├── core/profile.py              memory lifecycle, locks, revisions, transactions
+       ├── core/{onboarding,human3,monthly_reflection,growth}.py
+       ├── core/{security,access}.py     client scopes, access policy, audit chain
+       ├── core/{vault_identity,vault_management,repository}.py
+       ├── core/{sync,github}.py         local Git + optional private GitHub setup
+       └── core/{provider_auth,provider_adapters}.py
+                    │ explicit preview/decision
+                    └── optional OpenAI-compatible / Anthropic HTTP provider
+       │
+       ▼
+Private Markdown Vault (fact source; Markdown + local JSON/JSONL system records)
+       ▲                         │
+       │ optional editor         ├── managed backups outside Vault
+   Obsidian/Markdown editor      └── optional private Git repository
+       ▲
+MCP stdio gateway mcp_server.py ── scoped token + PROFILE_VAULT_ID handshake
 ```
 
-`profile.py`是兼容CLI；领域、文件存储和生命周期位于`core.profile`，AI访问策略位于`core.access`。MCP和本地审核界面都是适配器，不各自实现领域规则。
+## 模块职责与真实状态
+
+- **Frontend — 已实现**：Overview、首次引导、Memory Review、Profile/Timeline、Monthly Reflection、Growth、Security Center、AI Connections、Provider Authorization、备份恢复、GitHub 备份、导入。
+- **FastAPI — 已实现**：仅 loopback；健康检查以外的产品 API 受 bearer session 保护；托管生产 SPA；使用单一启动 Vault。
+- **Core — 已实现**：领域逻辑、原子写、锁、revision、事务恢复、路径约束集中于 `core/`。
+- **Markdown Vault — 已实现**：核心事实源；包含 Markdown 业务记录及 `90 System` 下的身份、安全/审计元数据。
+- **Memory Lifecycle — 已实现**：candidate→confirmed/rejected，forget/supersede，人工确认、冲突检测和事务恢复。
+- **Profile — 已实现**：由本地确认数据与 Profile Markdown 驱动；访问策略裁剪后展示。
+- **Monthly Reflection — 已实现**：四维、事件、目标、可编辑本地抽取摘要、确认与历史；无离页未保存提醒。
+- **Human 3.0 / Growth — 已实现**：复盘、四维自评、用户自选 Level、时间线、关联、目标；保持 local-only，不经 MCP 暴露。
+- **MCP Gateway — 已实现但刻意最小化**：7 个 tools、7 个 scopes、Vault identity 绑定；没有 Resources/Prompts。
+- **Security Center — 已实现**：客户端生命周期、hash-only token、scope、撤销/删除、哈希链审计、完整性失败关闭。
+- **AI Connections — 已实现**：客户端注册/授权/重签/撤销/删除及 Host 配置向导；当前仓库没有真实 Claude Desktop 安装环境验收证据。
+- **Windows Launcher — 已实现**：单实例、动态端口、一次性 fragment token、健康等待、关闭清理；安装器由 PyInstaller + Inno Setup 构建。
+- **Backup & Recovery — 已实现（手动）**：managed backup、校验、保留/配额、恢复安全备份、Git 历史恢复；定时自动备份未实现。
+- **Obsidian Integration — 部分实现**：模板含 `.obsidian`，外部编辑通过 VaultMonitor 检测；没有专用 Obsidian 插件，也不应成为强依赖。
+- **AI Provider Architecture — 已实现可选连接器**：授权记录、精确 outbound preview、逐次 decision、审计和 OpenAI-compatible/Anthropic adapter；不是通用插件生态。
 
 ## 信任边界
 
-1. Public仓库只有代码、空模板和虚构示例。
-2. Private仓库是个人事实的唯一可信源。
-3. 新记忆先进入`30 Memory/Inbox/`，确认后才能进入`30 Memory/Confirmed/`。
-4. 模型输入必须经过任务级选择；模型输出只是草稿。
-5. 公开发布必须通过独立导出目录和人工确认，不能直接合并私人Git历史。
-6. 不同AI共享已确认事实，不共享完整会话状态。
-7. MCP只允许创建候选记忆；确认、删除、发布保留给可信本地界面。
-
-## 后续扩展
-
-当前MCP使用stdio；审核界面和版本化HTTP API仅监听loopback。所有入口共享Vault文件锁，API使用启动令牌、内容revision和事务恢复。Phase 3再接入React界面，Phase 4负责单实例Launcher和优雅关闭。远程接入以后再评估HTTPS和OAuth。
-
+1. Browser→FastAPI：bearer token 只保存在内存并从 URL fragment 清除。
+2. FastAPI/Core→Vault：所有正式写入经过路径约束、锁、revision 与原子/事务操作。
+3. MCP→Vault：客户端 token、scope、`ai_access` 和 Vault identity 四重约束。
+4. Provider→Internet：仅用户批准的请求 payload 可离开本机。
+5. Public repo↔Private Vault：必须物理隔离；发布/提交前执行敏感文件扫描与 release gate。
