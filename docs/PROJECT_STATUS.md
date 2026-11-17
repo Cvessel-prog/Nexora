@@ -1,66 +1,37 @@
 # Project Status
 
-> **This file is the authoritative, current status of the project.**
->
-> Historical planning documents keep their original wording for audit purposes:
-> `docs/PHASE*_PLAN.md`, `docs/PRODUCT_UX_ROADMAP.md`, `docs/GITHUB_BACKUP_PLAN.md`,
-> `docs/AI_CONNECTIONS_PLAN.md`, `docs/PRODUCT_ARCHITECTURE.md`, `README_AGENT_HANDOFF.md`.
-> **Where they disagree with this file, this file wins.** Do not infer progress from their
-> “未实现 / 部分实现 / 尚未完成” sections without checking here first.
+审计时间：2026-11-17（Asia/Shanghai）`n代码基线：远程 `main@aa30f3a`；公开 Release：`v1.0.4`；本地审计克隆在开始时干净并与 `origin/main` 一致。
 
-Last updated: 2026-11-09 · Repository: `XY-code1/Nexora`
+## 当前阶段
 
-## 1. Delivery status
+NEXORA 已完成主要本地产品闭环，处于 **公开 v1.0.4 之后的稳定化 / Release Candidate 级别**，不是概念验证。核心记忆、复盘、Growth、安全、MCP、备份/恢复、GitHub 私有仓库连接、Provider 授权、Windows launcher/installer 均有真实实现和自动测试。尚不宜仅凭版本号认定为充分验证的稳定版：本机 E2E 因 Playwright Chromium 下载超时未执行，Windows installer 本轮未构建，Windows runtime ACL 语义仍未验证，定时备份缺失，文档存在历史漂移。
 
-All five README Roadmap items are delivered.
+## 当前能力
 
-| Roadmap | Status | Delivered by |
-|---|---|---|
-| 1. Refine first-run setup and Vault selection | **Done** | First-run wizard, registered-Vault quick connect, `vaultHints` |
-| 2. Add safer GitHub private-repository setup and privacy verification | **Done** | GitHub Device Flow, private verification, connection wizard |
-| 3. Improve backup history browsing and guided recovery | **Done** | 4-step recovery wizard, backup history filter/search/sort |
-| 4. Add explicit model-provider authorization | **Done** | `core/provider_auth.py` (per-scope, per-call, audit) |
-| 5. Provide user-controlled import tools | **Done** | Markdown/JSON import wizard |
+- 已实现：Vault 创建/校验/连接/重启切换、外部编辑监视、Memory lifecycle、Profile、对话式引导、月度复盘、Human 3.0、Growth、Security Center、AI Connections、Provider 授权、导入、managed backups、Git 历史/恢复、GitHub Device Flow/private 校验、Windows launcher/installer 配置。
+- 部分实现：Obsidian 仅作为可选文件编辑器（无插件）；Provider 仅两类 HTTP adapter；MCP 仅 Tools；自动备份无调度。
+- 设计/计划：更广泛 provider 插件生态、MCP Resources/Prompts、外部审计锚定等仍为未来选项。
 
-## 2. Feature matrix
+## 2026-11-17 测试结果
 
-| Capability | Status | Notes |
-|---|---|---|
-| Vault lifecycle (create / validate / connect / restart-switch) | Done | |
-| First-run wizard + registered Vault list | Done | |
-| External edit detection | **Done** | Resident `VaultMonitor` watcher, `/api/v1/vault/events`, non-blocking conflict banner |
-| Managed local backups (create / verify / restore) | Done | |
-| Backup retention + disk quota | **Done** | 20 copies / 500 MB per Vault, pruned when a backup is created |
-| Version history (local backups + Git commits) | **Done** | Unified timeline |
-| Git history browsing | **Done** | `GET /api/v1/git/history` |
-| Git history restore | **Done** | `POST /api/v1/git/restore`; managed safety backup first, HEAD unchanged |
-| Git change preview + sensitive-file scan | **Done** | `GET /api/v1/git/changes`; commits fail closed on a hit |
-| Commit safety backup | **Done** | `sync_commit` takes a managed backup before committing |
-| Git transport retry | **Done** | fetch/push retry transient transport failures with backoff |
-| GitHub Device Flow | **Done** | Token lives only in API process memory |
-| GitHub private-repository verification | **Done** | Public repositories are refused before the remote is written |
-| GitHub private-repository creation | **Done** | `POST /api/v1/github/create` |
-| GitHub connection wizard | **Done** | “GitHub 备份” page |
-| Memory import (Markdown / JSON) | Done | Candidates only, never auto-confirmed |
-| AI Provider authorization module | Done | No network access; inert until a provider opts in |
-| MCP host connection | Done | |
-| Windows launcher + installer | Done | |
+- Python：30 个 `tests/test_*.py` 脚本最终全部通过。首次 `test_launcher.py` 因尚未先构建 `apps/web/dist` 失败；按 CI 顺序完成 production build 后重跑通过。
+- Frontend unit：1 个 test file、28 tests 通过。
+- `npm run typecheck`：通过。
+- `npm run lint`：退出 0；有 1 个未使用变量 warning（`e2e/accessibility.spec.ts:4`）。
+- Production build：通过；主 JS 534.37 kB（gzip 145.31 kB），Vite 报告 >500 kB chunk warning。
+- Ruff：通过。
+- Release privacy gate：通过。
+- `pip-audit`：未发现已知 Python 依赖漏洞。
+- MCP protocol/security 与 Security lifecycle：相关 Python 测试通过。
+- E2E：未得出通过/失败结论；Playwright Chromium 205.8 MiB 下载多次 30 秒超时，测试未启动。
+- Windows installer smoke：本轮未执行（需要完整安装器构建环境）；launcher integration 已通过。
 
-## 3. Deliberate non-goals (still not planned)
+## GitHub 状态
 
-- No default cloud collection or cloud-hosted profile.
-- No silent memory confirmation.
-- No automatic psychological labels.
-- No unrestricted AI file access.
-- No screen / keyboard / microphone / browsing-history capture.
-- Growth data stays local-only (no growth scope over MCP).
+- 公开仓库无独立 Issues；GitHub 的 open issue count 5 全为开放 PR。
+- 开放 PR：#53 文档/API/CI 清理、#52 launcher shutdown timeout、#48 drawer focus、#47 E2E locator 稳定、#43 checkout action 依赖更新。
+- `main` 受保护；远程另有 10 个工作分支。PR 分支上的修复不得视为 `main` 已实现。
 
-## 4. Known remaining gaps
+## 工作区说明
 
-- No scheduled / automatic local backup.
-- Windows ACL semantics for the runtime file are unverified (`chmod 0600` is attempted).
-
-## 5. How to update this file
-
-When a capability changes state, update this file in the same PR. Planning documents may keep
-their historical wording, but add a one-line pointer to this file when they are edited.
+任务起始目录不是 Git 仓库且只含 `work/`、`outputs/`；因此不存在可比较的原本地开发分支或未提交修改。本次只读审计通过新克隆完成。审计生成的文档是未提交修改；没有 commit/push/merge。
