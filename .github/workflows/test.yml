@@ -99,6 +99,8 @@ jobs:
         working-directory: apps/web
       - run: npm run build
         working-directory: apps/web
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_win_acl.py tests/test_desktop_shell.py
       - run: python tests/test_launcher.py
       - run: python scripts/check_release.py
 

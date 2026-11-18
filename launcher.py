@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import os
 import secrets
@@ -14,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,7 +23,9 @@ from pathlib import Path
 import uvicorn
 from filelock import FileLock, Timeout
 
+import desktop_shell
 from apps.api import create_app
+from core import win_acl
 
 ROOT = Path(__file__).parent
 HOST = "127.0.0.1"
@@ -36,22 +38,32 @@ def runtime_directory(override: Path | None = None) -> Path:
     return base / "PersonalAIProfile"
 
 
+def default_vault() -> Path:
+    """A user-writable Vault location outside the install directory."""
+    from core.vault_identity import default_vault_directory
+    return (Path(default_vault_directory()) / "my-ai-profile").resolve()
+
+
 def choose_vault(value: Path | None) -> Path:
-    candidates = [value, Path(os.environ["PROFILE_VAULT"]) if os.environ.get("PROFILE_VAULT") else None, ROOT.parent / "my-ai-profile"]
-    for candidate in candidates:
-        if candidate and candidate.expanduser().is_dir():
-            return candidate.expanduser().resolve()
-    try:
-        from tkinter import Tk, filedialog
-        root = Tk()
-        root.withdraw()
-        selected = filedialog.askdirectory(title="选择 NEXORA 私人 Vault")
-        root.destroy()
-    except Exception:
-        selected = ""
-    if not selected:
-        raise RuntimeError("未选择私人 Vault。")
-    return Path(selected).resolve()
+    """Resolve the Vault without blocking the first launch on a file dialog."""
+    if value:
+        candidate = value.expanduser()
+        if not candidate.is_dir():
+            raise RuntimeError(f"指定的私人 Vault 不存在或不是文件夹：{candidate}")
+        return candidate.resolve()
+    configured = os.environ.get("PROFILE_VAULT")
+    if configured:
+        candidate = Path(configured).expanduser()
+        if not candidate.is_dir():
+            raise RuntimeError(f"PROFILE_VAULT 指向的私人 Vault 不存在：{candidate}")
+        return candidate.resolve()
+    checkout_default = ROOT.parent / "my-ai-profile"
+    if checkout_default.is_dir():
+        return checkout_default.resolve()
+    # First launch: create the default Vault.  Users can switch it later in the
+    # first-run wizard or Settings instead of facing a modal folder picker before
+    # the local service has even started.
+    return default_vault()
 
 
 def _newest_source_mtime(web: Path) -> float:
@@ -125,13 +137,16 @@ def browser_url(port: int, token: str) -> str:
 
 def write_runtime(path: Path, *, port: int, token: str, vault: Path) -> None:
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps({
+    temporary.unlink(missing_ok=True)
+    payload = json.dumps({
         "pid": os.getpid(), "port": port, "token": token,
         "vault": str(vault), "started": time.time(),
-    }, ensure_ascii=False), encoding="utf-8")
+    }, ensure_ascii=False).encode("utf-8")
+    # runtime.json carries the local bearer token.  Create the temporary file
+    # with a private DACL instead of relying on the ineffective chmod(0600).
+    win_acl.create_private_file(temporary, payload)
     os.replace(temporary, path)
-    with contextlib.suppress(OSError):
-        os.chmod(path, 0o600)
+    win_acl.secure_private_file(path)
 
 
 def wait_and_open(port: int, token: str, no_browser: bool) -> None:
@@ -143,6 +158,44 @@ def wait_and_open(port: int, token: str, no_browser: bool) -> None:
         time.sleep(0.1)
 
 
+def wait_until_healthy(port: int, *, timeout: float = 20.0, errors: list[BaseException] | None = None) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if errors:
+            raise RuntimeError(f"本地服务启动失败：{errors[0]}") from errors[0]
+        if healthy(port):
+            return
+        time.sleep(0.1)
+    raise RuntimeError("本地服务未能在预期时间内就绪；请查看 launcher-error.log 或重试。")
+
+
+def _run_server(server: uvicorn.Server, sock: socket.socket, errors: list[BaseException]) -> None:
+    try:
+        server.run(sockets=[sock])
+    except BaseException as exc:  # keep a windowed launch from dying silently
+        errors.append(exc)
+
+
+def relaunch(vault: Path, runtime_dir: Path, args: argparse.Namespace) -> None:
+    """Start a fresh process after a windowed Vault switch.
+
+    A WebView can only be started once per process, so the windowed path hands a
+    Vault switch to a new process instead of trying to rebuild the GUI in place.
+    """
+    command = [sys.executable]
+    if not getattr(sys, "frozen", False):
+        command.append(str(ROOT / "launcher.py"))
+    command += [
+        "--vault", str(vault), "--runtime-dir", str(runtime_dir),
+        "--port", str(args.port), "--wait-for-lock",
+    ]
+    if args.browser:
+        command.append("--browser")
+    if args.no_window:
+        command.append("--no-window")
+    subprocess.Popen(command, cwd=str(ROOT), close_fds=True)
+
+
 def launch(args: argparse.Namespace) -> int:
     state_dir = runtime_directory(args.runtime_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -151,17 +204,23 @@ def launch(args: argparse.Namespace) -> int:
     lock = FileLock(lock_file)
 
     try:
-        lock.acquire(timeout=0)
+        lock.acquire(timeout=10 if args.wait_for_lock else 0)
     except Timeout:
         for _ in range(50):
             current = read_runtime(runtime_file)
             if current and healthy(int(current.get("port", 0))):
                 if not args.no_browser:
-                    webbrowser.open(browser_url(int(current["port"]), str(current["token"])))
+                    url = browser_url(int(current["port"]), str(current["token"]))
+                    if sys.platform == "win32" and not args.no_window:
+                        desktop_shell.open_window(url, threading.Event(), force_browser=args.browser)
+                    else:
+                        webbrowser.open(url)
                 return 0
             time.sleep(0.1)
         raise RuntimeError("已有启动进程占用单实例锁，但本地服务尚未就绪。") from None
 
+    relaunch_vault: Path | None = None
+    use_window = sys.platform == "win32" and not args.no_browser and not args.no_window
     try:
         web_dist = ensure_web_build()
         vault = choose_vault(args.vault)
@@ -197,27 +256,69 @@ def launch(args: argparse.Namespace) -> int:
             app.state.request_shutdown = request_shutdown
             app.state.request_restart = restart
             write_runtime(runtime_file, port=port, token=token, vault=vault)
-            threading.Thread(target=wait_and_open, args=(port, token, args.no_browser), daemon=True).start()
-            server.run(sockets=[sock])
-            sock.close()
-            runtime_file.unlink(missing_ok=True)
+
+            if not use_window:
+                threading.Thread(target=wait_and_open, args=(port, token, args.no_browser), daemon=True).start()
+                try:
+                    server.run(sockets=[sock])
+                finally:
+                    sock.close()
+                    runtime_file.unlink(missing_ok=True)
+                if not requested:
+                    return 0
+                vault = requested[-1]
+                continue
+
+            errors: list[BaseException] = []
+            server_thread = threading.Thread(target=_run_server, args=(server, sock, errors), name="nexora-server", daemon=True)
+            server_thread.start()
+            try:
+                wait_until_healthy(port, errors=errors)
+                stop_event = threading.Event()
+
+                def stop_window_when_server_stops(_thread: threading.Thread = server_thread, _event: threading.Event = stop_event) -> None:
+                    _thread.join()
+                    _event.set()
+
+                threading.Thread(target=stop_window_when_server_stops, daemon=True).start()
+                backend_used = desktop_shell.open_window(
+                    browser_url(port, token), stop_event, force_browser=args.browser,
+                )
+                if backend_used in {"webview", "edge"}:
+                    # The user closed the native window: stop the local service.
+                    stop_event.set()
+                    server.should_exit = True
+                # In the browser fallback the server keeps running until the user
+                # chooses “关闭服务” (or the process is stopped).
+                server_thread.join()
+            finally:
+                sock.close()
+                runtime_file.unlink(missing_ok=True)
+            if errors and not requested:
+                raise RuntimeError(f"本地服务异常退出：{errors[0]}") from errors[0]
             if not requested:
                 return 0
-            vault = requested[-1]
+            relaunch_vault = requested[-1]
+            break
     finally:
         runtime_file.unlink(missing_ok=True)
         lock.release()
         lock_file.unlink(missing_ok=True)
 
+    if relaunch_vault is not None:
+        relaunch(relaunch_vault, state_dir, args)
+    return 0
 
-def show_error(message: str, state_dir: Path) -> None:
+
+def show_error(exc: BaseException, state_dir: Path) -> None:
     state_dir.mkdir(parents=True, exist_ok=True)
+    message = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     (state_dir / "launcher-error.log").write_text(message, encoding="utf-8")
     try:
         from tkinter import Tk, messagebox
         root = Tk()
         root.withdraw()
-        messagebox.showerror("NEXORA", message)
+        messagebox.showerror("NEXORA", str(exc) or type(exc).__name__)
         root.destroy()
     except Exception:
         print(message, file=sys.stderr)
@@ -229,11 +330,14 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--runtime-dir", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--no-browser", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--no-window", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--browser", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--wait-for-lock", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
         return launch(args)
     except Exception as exc:
-        show_error(str(exc), runtime_directory(args.runtime_dir))
+        show_error(exc, runtime_directory(args.runtime_dir))
         return 1
 
 
