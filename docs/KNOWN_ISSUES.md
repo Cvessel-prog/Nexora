@@ -2,9 +2,9 @@
 
 ## 发布阻断/高优先级
 
-1. **Windows runtime ACL 未验证**：代码尝试 `chmod 0600`，但 Windows ACL 语义没有证据；涉及本地 token/runtime metadata。
+1. **Windows ACL 候选修复待最终验收**：候选分支已使用 Win32 protected DACL 保护 runtime、token 元数据、本机配置、备份和日志，本地合成 ACL 测试通过；仍需干净 Windows runner、普通用户及真实双用户隔离证据后才能关闭。
 2. **本地 E2E 环境仍未复验**：早期 Playwright Chromium 下载从 0% 多次 30 秒超时；GitHub CI 的完整 E2E 已通过，但本机下载根因仍需 R3 取证。
-3. **干净 VM 人工安装验收未完成**：GitHub Windows installer smoke 已通过；全新安装、升级、卸载、数据保留和异常恢复仍需 R2 的真实 VM 证据。
+3. **干净 VM 人工安装验收未完成**：候选 CI 已加入全新安装、重启、升级、卸载、数据保留和重装自动验收；安装向导、SmartScreen、普通用户和异常恢复仍需 R2 的真实 VM 证据。
 
 ## 产品与 UX
 
