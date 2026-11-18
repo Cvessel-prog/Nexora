@@ -17,7 +17,7 @@ from pathlib import Path
 from filelock import FileLock
 
 from .profile import FOLDER_STATUSES, MEMORY_ROOT, REQUIRED, ROOT, SECRET_PATTERNS, VALID_STATUSES, atomic_write, parse_record
-from .windows_security import ensure_private_directory, protect_private_path
+from .windows_security import ensure_private_directory, ensure_private_tree, protect_private_path
 
 CURRENT_SCHEMA_VERSION = 1
 BACKUP_FORMAT = 2
@@ -61,7 +61,7 @@ def schema_version(vault: Path) -> int:
 
 def backup_root() -> Path:
     base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) if os.name == "nt" else Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    app_data = ensure_private_directory(base / "PersonalAIProfile")
+    app_data = ensure_private_tree(base / "PersonalAIProfile")
     return ensure_private_directory(app_data / "backups")
 
 

@@ -144,6 +144,13 @@ def wait_and_open(port: int, token: str, no_browser: bool) -> None:
 
 def launch(args: argparse.Namespace) -> int:
     state_dir = runtime_directory(args.runtime_dir)
+    vault = choose_vault(args.vault)
+    try:
+        state_dir.relative_to(vault)
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError("Runtime 目录不能位于私人 Vault 内；请选择独立目录。")
     ensure_private_directory(state_dir)
     runtime_file = state_dir / "runtime.json"
     lock_file = state_dir / "launcher.lock"
@@ -163,7 +170,6 @@ def launch(args: argparse.Namespace) -> int:
 
     try:
         web_dist = ensure_web_build()
-        vault = choose_vault(args.vault)
         while True:
             ensure_vault(vault)
             token = secrets.token_urlsafe(32)
@@ -210,10 +216,15 @@ def launch(args: argparse.Namespace) -> int:
 
 
 def show_error(message: str, state_dir: Path) -> None:
-    ensure_private_directory(state_dir)
-    log = state_dir / "launcher-error.log"
-    log.write_text(message, encoding="utf-8")
-    protect_private_path(log)
+    try:
+        ensure_private_directory(state_dir)
+        log = state_dir / "launcher-error.log"
+        log.write_text(message, encoding="utf-8")
+        protect_private_path(log)
+    except (OSError, RuntimeError):
+        # Never leave a diagnostic in an unprotected file. Presentation below
+        # must still report the original startup error.
+        pass
     try:
         from tkinter import Tk, messagebox
         root = Tk()

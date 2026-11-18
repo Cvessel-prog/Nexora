@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT))
 
-from core.windows_security import ensure_private_directory, protect_private_path
+from core.windows_security import ensure_private_directory, ensure_private_tree, protect_private_path
 
 if os.name != "nt":
     print("Windows ACL test skipped on non-Windows")
@@ -72,5 +72,20 @@ with tempfile.TemporaryDirectory(prefix="nexora-acl-") as temporary:
     protect_private_path(secret)
     assert allowed_sids(secret) == expected
     assert acl_summary(secret) == {"Protected": True, "Owner": current_sid}
+
+    legacy = Path(temporary) / "legacy-app-data"
+    nested = legacy / "backups" / "snapshot"
+    nested.mkdir(parents=True)
+    old_secret = nested / "Profile.md"
+    old_secret.write_text("synthetic legacy backup", encoding="utf-8")
+    subprocess.run(
+        ["icacls", str(legacy), "/grant", "*S-1-1-0:(OI)(CI)(RX)"],
+        check=True,
+        capture_output=True,
+    )
+    ensure_private_tree(legacy)
+    for existing in (legacy, legacy / "backups", nested, old_secret):
+        assert allowed_sids(existing) == expected
+        assert acl_summary(existing) == {"Protected": True, "Owner": current_sid}
 
 print("Windows private directory and file ACL tests passed")

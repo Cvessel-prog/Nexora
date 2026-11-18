@@ -199,4 +199,4 @@ Owner 为 `<CURRENT_USER>`，没有额外 `Everyone`、`Users`、`Authenticated 
 - Windows installer smoke 增加打包态 runtime/app-data ACL、重启、token 轮换和卸载后 Vault 保留检查。
 - 本地全部 Python 测试、Ruff、release packaging/privacy gate 和前端 typecheck/unit/lint/build 已执行；干净 Windows runner 仍需在推送后确认。
 
-候选修复没有自动更改用户选择的既有 Vault 根权限；这仍采用“检查并提示，而非擅自重写私人目录 ACL”的产品边界。
+候选修复没有自动更改用户选择的既有 Vault 根权限。对额外读取主体进行检查并向用户提示仍是后续建议控制，当前代码尚未实现该提示。

@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import ctypes
 import os
+import threading
 from ctypes import wintypes
 from pathlib import Path
+
+_REPAIRED_TREES: set[Path] = set()
+_REPAIR_LOCK = threading.Lock()
 
 
 def _windows_error(action: str) -> RuntimeError:
@@ -101,3 +105,27 @@ def ensure_private_directory(path: Path) -> Path:
     target = path.expanduser().resolve()
     target.mkdir(parents=True, exist_ok=True)
     return protect_private_path(target, directory=True)
+
+
+def _repair_private_tree(target: Path) -> None:
+    """Repair an app-owned tree without following links or junctions."""
+    protect_private_path(target, directory=True)
+    with os.scandir(target) as entries:
+        for entry in entries:
+            child = Path(entry.path)
+            if entry.is_symlink():
+                raise RuntimeError(f"私有应用目录包含不受支持的链接：{child}")
+            if entry.is_dir(follow_symlinks=False):
+                _repair_private_tree(child)
+            else:
+                protect_private_path(child)
+
+
+def ensure_private_tree(path: Path) -> Path:
+    """Create and once-per-process repair an app-owned private hierarchy."""
+    target = ensure_private_directory(path)
+    with _REPAIR_LOCK:
+        if target not in _REPAIRED_TREES:
+            _repair_private_tree(target)
+            _REPAIRED_TREES.add(target)
+    return target
