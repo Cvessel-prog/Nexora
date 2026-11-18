@@ -21,9 +21,9 @@ test('hash navigation restores scroll, focus, history and refresh state', async 
   await stage.evaluate((element) => { element.scrollTop = 600 })
   await expect.poll(() => stage.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
 
-  await page.getByRole('navigation', { name: '档案功能' }).getByRole('button', { name: '记忆审核' }).click()
+  await page.getByRole('navigation', { name: '档案功能' }).getByRole('button', { name: '记忆', exact: true }).click()
   await expect(page).toHaveURL(/#\/memory-review$/)
-  await expect(page.getByRole('heading', { name: '记忆审核', level: 1 })).toBeFocused()
+  await expect(page.getByRole('heading', { name: '记忆', level: 1 })).toBeFocused()
   await expect.poll(() => stage.evaluate((element) => element.scrollTop)).toBe(0)
 
   await page.getByRole('navigation', { name: '档案功能' }).getByRole('button', { name: '个人档案', exact: true }).click()
@@ -32,7 +32,7 @@ test('hash navigation restores scroll, focus, history and refresh state', async 
 
   await page.goBack()
   await expect(page).toHaveURL(/#\/memory-review$/)
-  await expect(page.getByRole('heading', { name: '记忆审核', level: 1 })).toBeFocused()
+  await expect(page.getByRole('heading', { name: '记忆', level: 1 })).toBeFocused()
   await page.goForward()
   await expect(page).toHaveURL(/#\/profile$/)
 

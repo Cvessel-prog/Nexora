@@ -9,7 +9,7 @@ async function connect(page: import('@playwright/test').Page) {
   await page.goto('/')
   await page.getByLabel('本地启动令牌').fill('e2e-token')
   await page.getByRole('button', { name: '连接审核空间' }).click()
-  await page.getByRole('button', { name: '成长仪表盘' }).click()
+  await page.getByRole('button', { name: '成长', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Personal Growth Intelligence' })).toBeVisible()
 }
 
