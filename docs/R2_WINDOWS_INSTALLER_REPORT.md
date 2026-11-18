@@ -22,6 +22,7 @@
 6. 本地执行：
    - `python tests/test_release_packaging.py`：PASS
    - `python scripts/check_release.py`：PASS
+7. 候选 CI 首次执行发现公开 `v1.0.4` 的 packaged GUI 启动失败：`Unable to configure formatter 'default'`。根因是该版本以无控制台 PyInstaller GUI 运行，却保留 Uvicorn 默认日志 formatter；后续代码已使用 `log_config=None`，但公开产物本身不可回写修复。
 
 ## 尚未执行
 
@@ -37,7 +38,7 @@
 ## 阻塞原因
 
 1. 当前主机没有可操作的干净 Windows VM/快照。
-2. 当前工作区缺少 PyInstaller、Inno Setup，且没有候选安装包。
+2. 当前工作区缺少 PyInstaller、Inno Setup；候选包只能由干净 Windows CI 构建。
 3. R1 ACL 门禁仍为 FAIL；即使安装流程通过，也不能宣布稳定版 ready。
 4. 发布 `v1.0.4` 安装包未签名，需要决定稳定版签名要求并补充签名证书流水线证据。
 
@@ -63,5 +64,7 @@ R2 当前不能通过。现有自动 smoke 只证明“安装包能在 GitHub �
 4. 下载并校验公开 `v1.0.4` 安装包 SHA-256。
 5. `v1.0.4` 覆盖安装到内部候选 `1.0.4.1`，验证合成数据与 Vault identity 保留。
 6. 卸载候选、重新安装候选、重新连接原合成 Vault并再次验证数据。
+
+公开 `v1.0.4` packaged GUI 已被实测为无法启动，因此自动升级用例不会伪造“基线运行成功”：它使用与 `v1.0.4` 完全相同的 Vault template 建立合成数据，先安装真实 `v1.0.4`，再覆盖安装候选并验证数据、identity、token 轮换、卸载和重装。`v1.0.4` 启动失败单独保留为发布缺陷证据。
 
 这些自动检查可解决升级/重启/卸载/重装的可重复证据缺口；安装向导、SmartScreen 和真正标准用户交互仍需人工 VM 验收。

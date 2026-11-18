@@ -66,25 +66,31 @@ function Uninstall-App {
 }
 
 try {
-    Install-App $BaselineInstaller
-    Start-App
-    $BaselineToken = $Runtime.token
+    # v1.0.4 and the candidate use the same Vault template. Initialize the
+    # synthetic data before installing either package because the published
+    # v1.0.4 GUI build cannot start (its Uvicorn formatter expects stderr).
+    $env:NEXORA_SYNTHETIC_VAULT = $VaultDir
+    python -c "import os; from core.profile import init; init(os.environ['NEXORA_SYNTHETIC_VAULT'])"
+    if ($LASTEXITCODE -ne 0) { throw "Failed to initialize the synthetic v1.0.4-compatible Vault." }
     $IdentityPath = Join-Path $VaultDir "90 System\vault.json"
     $VaultIdentity = (Get-Content -Raw $IdentityPath | ConvertFrom-Json).vault_id
     $Marker = Join-Path $VaultDir "r2-upgrade-marker.txt"
     Set-Content -LiteralPath $Marker -Value "synthetic upgrade marker" -Encoding utf8
-    Stop-App
 
+    Install-App $BaselineInstaller
     Install-App $CandidateInstaller
     Start-App
     if (-not (Test-Path $Marker)) { throw "Upgrade lost the external synthetic Vault marker." }
     if ((Get-Content -Raw $IdentityPath | ConvertFrom-Json).vault_id -ne $VaultIdentity) {
         throw "Upgrade changed the Vault identity."
     }
-    if ($Runtime.token -eq $BaselineToken) { throw "Upgrade reused the baseline runtime token." }
+    $FirstCandidateToken = $Runtime.token
+    Stop-App
+    Start-App
+    if ($Runtime.token -eq $FirstCandidateToken) { throw "Candidate restart reused the previous runtime token." }
     try {
-        Invoke-RestMethod -Uri "http://127.0.0.1:$($Runtime.port)/api/v1/vault" -Headers @{ Authorization = "Bearer $BaselineToken" } -TimeoutSec 5 | Out-Null
-        throw "Baseline token remained valid after upgrade."
+        Invoke-RestMethod -Uri "http://127.0.0.1:$($Runtime.port)/api/v1/vault" -Headers @{ Authorization = "Bearer $FirstCandidateToken" } -TimeoutSec 5 | Out-Null
+        throw "Previous candidate token remained valid after restart."
     } catch {
         if ($_.Exception.Response.StatusCode.value__ -ne 401) { throw }
     }
