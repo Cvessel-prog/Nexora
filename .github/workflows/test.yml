@@ -61,7 +61,9 @@ jobs:
       - run: ruff check .
       - run: python scripts/check_release.py
       - run: pip-audit -r requirements.lock.txt
-      - run: npm audit --audit-level=high --registry=https://registry.npmjs.org
+      # Runtime packages are the shipped attack surface. Build/test tooling is
+      # exercised above but is not bundled into the desktop application.
+      - run: npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org
         working-directory: apps/web
       - run: mkdir -p artifacts && cyclonedx-py requirements requirements.lock.txt --output-reproducible --of JSON -o artifacts/python-sbom.json
       - run: npm sbom --sbom-format cyclonedx > ../../artifacts/node-sbom.json
