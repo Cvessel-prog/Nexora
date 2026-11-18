@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import errno
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -29,6 +32,21 @@ from core import win_acl
 
 ROOT = Path(__file__).parent
 HOST = "127.0.0.1"
+LOGGER = logging.getLogger("nexora.launcher")
+_SECRETS: set[str] = set()
+
+
+def _remember_secret(value: object) -> None:
+    text = str(value or "")
+    if text:
+        _SECRETS.add(text)
+
+
+def _redact(text: str) -> str:
+    for secret in _SECRETS:
+        text = text.replace(secret, "[redacted]")
+    return text
+
 
 
 def runtime_directory(override: Path | None = None) -> Path:
@@ -36,6 +54,53 @@ def runtime_directory(override: Path | None = None) -> Path:
         return override.expanduser().resolve()
     base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
     return base / "PersonalAIProfile"
+
+
+def configure_logging(state_dir: Path) -> None:
+    """Write a small, append-only startup log without tokens or Vault content."""
+    path = state_dir / "launcher.log"
+    for handler in list(LOGGER.handlers):
+        LOGGER.removeHandler(handler)
+        handler.close()
+    with contextlib.suppress(OSError, RuntimeError):
+        # Keep the log private and repair an inherited empty DACL on Windows.
+        win_acl.ensure_private_file(path, b"")
+    try:
+        handler = logging.FileHandler(path, encoding="utf-8")
+    except OSError:
+        # Logging must never prevent the product from starting.
+        LOGGER.addHandler(logging.NullHandler())
+        return
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    LOGGER.addHandler(handler)
+    LOGGER.setLevel(logging.INFO)
+    LOGGER.propagate = False
+
+
+def bind_socket(port: int) -> socket.socket:
+    """Bind the loopback listener with a user-readable conflict message."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if os.name == "nt":
+        # On Windows SO_REUSEADDR permits hijacking a port another process is
+        # already listening on, which would hide a real conflict.  Exclusive use
+        # makes bind() fail so the user gets an actionable message.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    else:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind((HOST, port))
+    except OSError as exc:
+        sock.close()
+        in_use = exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048
+        if in_use:
+            raise RuntimeError(
+                f"端口 {port} 已被其他程序占用。请关闭占用该端口的程序，"
+                "或不要指定 --port，让 NEXORA 自动选择可用端口。"
+            ) from exc
+        raise RuntimeError(f"无法在 127.0.0.1:{port} 启动本地服务：{exc}") from exc
+    sock.listen(128)
+    return sock
+
 
 
 def default_vault() -> Path:
@@ -108,8 +173,25 @@ def ensure_web_build() -> Path:
 
 
 def ensure_vault(vault: Path) -> None:
-    """Create the Vault from the bundled template when the target is missing or empty."""
+    """Create the Vault from the bundled template, or fail with a clear message."""
+    if vault.exists() and not vault.is_dir():
+        raise RuntimeError(f"Vault 路径不是文件夹：{vault}")
     if vault.exists() and any(vault.iterdir()):
+        # An arbitrary non-empty folder is not a Vault.  Validate before the
+        # service starts so the user sees one actionable message instead of a
+        # half-working workspace.
+        from core.vault_management import CURRENT_SCHEMA_VERSION, schema_version
+        version = schema_version(vault)
+        if version == 0:
+            raise RuntimeError(
+                f"所选文件夹不是 NEXORA Vault（缺少有效的 Vault 配置）：{vault}。"
+                "请选择一个空文件夹，或使用 NEXORA 创建的 Vault。"
+            )
+        if version != CURRENT_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"Vault 版本为 {version}，当前应用需要 {CURRENT_SCHEMA_VERSION}。"
+                "请先运行迁移或使用匹配版本的 NEXORA。"
+            )
         return
     from core import profile
     profile.init(str(vault))
@@ -117,9 +199,9 @@ def ensure_vault(vault: Path) -> None:
 
 def read_runtime(path: Path) -> dict[str, object] | None:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(win_acl.read_private_bytes(path).decode("utf-8"))
         return data if isinstance(data, dict) else None
-    except (OSError, ValueError):
+    except (OSError, ValueError, RuntimeError):
         return None
 
 
@@ -152,10 +234,28 @@ def write_runtime(path: Path, *, port: int, token: str, vault: Path) -> None:
 def wait_and_open(port: int, token: str, no_browser: bool) -> None:
     for _ in range(100):
         if healthy(port):
+            LOGGER.info("local service ready on port %s (browser mode)", port)
             if not no_browser:
                 webbrowser.open(browser_url(port, token))
             return
         time.sleep(0.1)
+
+
+def make_server(app: object, port: int) -> uvicorn.Server:
+    """Build Uvicorn without its stdout-dependent default formatter."""
+    return uvicorn.Server(
+        uvicorn.Config(
+            app,
+            host=HOST,
+            port=port,
+            log_level="warning",
+            log_config=None,
+            access_log=False,
+            # A lingering keep-alive connection must not keep the app alive
+            # after the user closes the window or chooses 关闭服务.
+            timeout_graceful_shutdown=5,
+        )
+    )
 
 
 def wait_until_healthy(port: int, *, timeout: float = 20.0, errors: list[BaseException] | None = None) -> None:
@@ -199,16 +299,20 @@ def relaunch(vault: Path, runtime_dir: Path, args: argparse.Namespace) -> None:
 def launch(args: argparse.Namespace) -> int:
     state_dir = runtime_directory(args.runtime_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
+    configure_logging(state_dir)
     runtime_file = state_dir / "runtime.json"
     lock_file = state_dir / "launcher.lock"
     lock = FileLock(lock_file)
+    LOGGER.info("launcher start pid=%s", os.getpid())
 
     try:
         lock.acquire(timeout=10 if args.wait_for_lock else 0)
     except Timeout:
+        LOGGER.info("existing launcher detected; reusing the running service")
         for _ in range(50):
             current = read_runtime(runtime_file)
             if current and healthy(int(current.get("port", 0))):
+                _remember_secret(current.get("token", ""))
                 if not args.no_browser:
                     url = browser_url(int(current["port"]), str(current["token"]))
                     if sys.platform == "win32" and not args.no_window:
@@ -217,35 +321,23 @@ def launch(args: argparse.Namespace) -> int:
                         webbrowser.open(url)
                 return 0
             time.sleep(0.1)
-        raise RuntimeError("已有启动进程占用单实例锁，但本地服务尚未就绪。") from None
+        raise RuntimeError("已有启动进程占用单实例锁，但本地服务尚未就绪。请稍后重试；若持续出现，请关闭残留的 NEXORA 进程。") from None
 
     relaunch_vault: Path | None = None
     use_window = sys.platform == "win32" and not args.no_browser and not args.no_window
     try:
         web_dist = ensure_web_build()
         vault = choose_vault(args.vault)
+        LOGGER.info("vault selected (path omitted from log)")
         while True:
             ensure_vault(vault)
             token = secrets.token_urlsafe(32)
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind((HOST, args.port))
-            sock.listen(128)
+            _remember_secret(token)
+            sock = bind_socket(args.port)
             port = int(sock.getsockname()[1])
             requested: list[Path] = []
             app = create_app(vault, token=token, web_dist=web_dist, watch=True)
-            # The packaged Windows GUI executable has no stdout/stderr. Skip
-            # Uvicorn's default formatter, which assumes sys.stdout.isatty().
-            server = uvicorn.Server(
-                uvicorn.Config(
-                    app,
-                    host=HOST,
-                    port=port,
-                    log_level="warning",
-                    log_config=None,
-                    access_log=False,
-                )
-            )
+            server = make_server(app, port)
             def request_shutdown(_server: uvicorn.Server = server) -> None:
                 _server.should_exit = True
 
@@ -264,8 +356,10 @@ def launch(args: argparse.Namespace) -> int:
                 finally:
                     sock.close()
                     runtime_file.unlink(missing_ok=True)
+                LOGGER.info("local service stopped")
                 if not requested:
                     return 0
+                LOGGER.info("vault switch requested; restarting service")
                 vault = requested[-1]
                 continue
 
@@ -274,6 +368,7 @@ def launch(args: argparse.Namespace) -> int:
             server_thread.start()
             try:
                 wait_until_healthy(port, errors=errors)
+                LOGGER.info("local service ready on port %s (window mode)", port)
                 stop_event = threading.Event()
 
                 def stop_window_when_server_stops(_thread: threading.Thread = server_thread, _event: threading.Event = stop_event) -> None:
@@ -284,6 +379,7 @@ def launch(args: argparse.Namespace) -> int:
                 backend_used = desktop_shell.open_window(
                     browser_url(port, token), stop_event, force_browser=args.browser,
                 )
+                LOGGER.info("desktop window closed (backend=%s)", backend_used)
                 if backend_used in {"webview", "edge"}:
                     # The user closed the native window: stop the local service.
                     stop_event.set()
@@ -297,9 +393,16 @@ def launch(args: argparse.Namespace) -> int:
             if errors and not requested:
                 raise RuntimeError(f"本地服务异常退出：{errors[0]}") from errors[0]
             if not requested:
+                LOGGER.info("local service stopped")
                 return 0
+            LOGGER.info("vault switch requested; relaunching window")
             relaunch_vault = requested[-1]
             break
+    except Exception as exc:
+        # The full traceback goes to launcher-error.log; the routine log keeps
+        # one readable line and never includes the bearer token.
+        LOGGER.error("launcher failed: %s", _redact(str(exc)))
+        raise
     finally:
         runtime_file.unlink(missing_ok=True)
         lock.release()
@@ -312,13 +415,18 @@ def launch(args: argparse.Namespace) -> int:
 
 def show_error(exc: BaseException, state_dir: Path) -> None:
     state_dir.mkdir(parents=True, exist_ok=True)
-    message = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    (state_dir / "launcher-error.log").write_text(message, encoding="utf-8")
+    error_log = state_dir / "launcher-error.log"
+    message = _redact("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+    with contextlib.suppress(OSError, RuntimeError):
+        # The traceback contains local paths; keep the diagnostic file private.
+        win_acl.write_private_file(error_log, message.encode("utf-8"))
+    summary = _redact(str(exc) or type(exc).__name__)
+    dialog = f"{summary}\n\n详细信息已写入：{error_log}"
     try:
         from tkinter import Tk, messagebox
         root = Tk()
         root.withdraw()
-        messagebox.showerror("NEXORA", str(exc) or type(exc).__name__)
+        messagebox.showerror("NEXORA 无法启动", dialog)
         root.destroy()
     except Exception:
         print(message, file=sys.stderr)

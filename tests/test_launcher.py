@@ -51,6 +51,16 @@ def main():
             port = int(runtime["port"])
             token = str(runtime["token"])
             assert port > 0 and token
+            log_path = runtime_dir / "launcher.log"
+            log_deadline = time.monotonic() + 10
+            log_text = ""
+            while time.monotonic() < log_deadline:
+                log_text = log_path.read_text(encoding="utf-8")
+                if "local service ready on port" in log_text:
+                    break
+                time.sleep(0.1)
+            assert "local service ready on port" in log_text
+            assert token not in log_text
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/v1/health", timeout=2) as response:
                 assert response.status == 200
 
@@ -109,10 +119,51 @@ def main():
                     break
                 time.sleep(0.1)
             assert not runtime_file.exists()
+            final_log = log_path.read_text(encoding="utf-8")
+            assert "local service stopped" in final_log
+            assert token not in final_log
+            assert old_token not in final_log
         finally:
             if process.poll() is None:
                 process.terminate()
                 process.wait(timeout=5)
+
+        # Abnormal exit recovery: a killed launcher can leave a stale
+        # runtime.json and lock file behind.  A fresh launch must replace both
+        # and serve the same Vault again.
+        crash_dir = base / "runtime-crash"
+        crash_command = [
+            sys.executable, str(ROOT / "launcher.py"), "--vault", str(vault),
+            "--runtime-dir", str(crash_dir), "--no-browser",
+        ]
+        first = subprocess.Popen(crash_command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        first_runtime = wait_for_runtime(crash_dir / "runtime.json")
+        first_pid = int(first_runtime["pid"])
+        first.terminate()
+        first.wait(timeout=10)
+        second = subprocess.Popen(crash_command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            second_runtime = wait_for_runtime(crash_dir / "runtime.json")
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and int(second_runtime.get("pid", 0)) == first_pid:
+                time.sleep(0.1)
+                second_runtime = read_runtime(crash_dir / "runtime.json") or second_runtime
+            assert int(second_runtime["pid"]) != first_pid
+            second_port = int(second_runtime["port"])
+            second_token = str(second_runtime["token"])
+            with urllib.request.urlopen(f"http://127.0.0.1:{second_port}/api/v1/health", timeout=2) as response:
+                assert response.status == 200
+            stop = urllib.request.Request(
+                f"http://127.0.0.1:{second_port}/api/v1/shutdown", method="POST",
+                headers={"Authorization": f"Bearer {second_token}"},
+            )
+            with urllib.request.urlopen(stop, timeout=2) as response:
+                assert response.status == 200
+            assert second.wait(timeout=30) == 0
+        finally:
+            if second.poll() is None:
+                second.terminate()
+                second.wait(timeout=5)
     print("launcher integration passed")
 
 
