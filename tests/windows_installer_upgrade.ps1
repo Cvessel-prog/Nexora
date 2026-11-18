@@ -9,6 +9,7 @@ $InstallDir = Join-Path $WorkRoot "installed"
 $VaultDir = Join-Path $WorkRoot "vault"
 $RuntimeDir = Join-Path $WorkRoot "runtime"
 $RuntimeFile = Join-Path $RuntimeDir "runtime.json"
+$LauncherError = Join-Path $RuntimeDir "launcher-error.log"
 $AppExe = Join-Path $InstallDir "personal-ai-profile.exe"
 $Process = $null
 $Runtime = $null
@@ -28,9 +29,13 @@ function Start-App {
     $script:Process = Start-Process -FilePath $AppExe -ArgumentList @(
         "--vault", "`"$VaultDir`"", "--runtime-dir", "`"$RuntimeDir`"", "--no-browser"
     ) -PassThru -WindowStyle Hidden
-    $Deadline = [DateTime]::UtcNow.AddSeconds(45)
+    Remove-Item -LiteralPath $LauncherError -Force -ErrorAction SilentlyContinue
+    $Deadline = [DateTime]::UtcNow.AddSeconds(90)
     while ([DateTime]::UtcNow -lt $Deadline) {
         if ($script:Process.HasExited) { throw "Application exited early with code $($script:Process.ExitCode)." }
+        if (Test-Path $LauncherError) {
+            throw "Application launcher failed: $(Get-Content -Raw $LauncherError)"
+        }
         if (Test-Path $RuntimeFile) {
             try {
                 $Value = Get-Content -Raw $RuntimeFile | ConvertFrom-Json
@@ -41,7 +46,9 @@ function Start-App {
             } catch { Start-Sleep -Seconds 1 }
         } else { Start-Sleep -Seconds 1 }
     }
-    throw "Application did not become healthy."
+    $Diagnostics = Get-ChildItem -LiteralPath $RuntimeDir -Force -ErrorAction SilentlyContinue |
+        Select-Object Name, Length, LastWriteTime | Out-String
+    throw "Application did not become healthy within 90 seconds. Runtime diagnostics:`n$Diagnostics"
 }
 
 function Stop-App {
