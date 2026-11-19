@@ -22,12 +22,29 @@ hiddenimports = [
     "uvicorn.protocols.http.h11_impl",
     "uvicorn.lifespan.on",
     "uvicorn.lifespan.off",
+    "webview.platforms.edgechromium",
+    "webview.platforms.winforms",
+    "clr",
+    "pythonnet",
 ]
+
+binaries = []
+try:
+    # The desktop host is optional: without pywebview the launcher falls back to
+    # an Edge app window. When it is installed, bundle its WebView2 assemblies.
+    from PyInstaller.utils.hooks import collect_all
+
+    webview_datas, webview_binaries, webview_hidden = collect_all("webview")
+    datas += webview_datas
+    binaries += webview_binaries
+    hiddenimports += webview_hidden
+except Exception:
+    pass
 
 a = Analysis(
     [str(ROOT / "launcher.py")],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

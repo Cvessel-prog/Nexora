@@ -16,6 +16,7 @@ from pathlib import Path
 
 from filelock import FileLock
 
+from . import win_acl
 from .profile import FOLDER_STATUSES, MEMORY_ROOT, REQUIRED, ROOT, SECRET_PATTERNS, VALID_STATUSES, atomic_write, parse_record
 
 CURRENT_SCHEMA_VERSION = 1
@@ -78,17 +79,9 @@ def _path_lock(path: Path, namespace: str) -> FileLock:
 
 def _local_binding(namespace: str, *values: Path) -> str:
     key_file = backup_root().parent / "binding.key"
-    key_file.parent.mkdir(parents=True, exist_ok=True)
-    if not key_file.is_file():
-        try:
-            descriptor = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            descriptor = None
-        if descriptor is not None:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(secrets.token_bytes(32))
+    win_acl.ensure_private_file(key_file, secrets.token_bytes(32))
     payload = "\0".join([namespace, *(str(value.resolve()) for value in values)]).encode("utf-8")
-    return hmac.new(key_file.read_bytes(), payload, hashlib.sha256).hexdigest()
+    return hmac.new(win_acl.read_private_bytes(key_file), payload, hashlib.sha256).hexdigest()
 
 
 def require_current_schema(vault: Path) -> None:

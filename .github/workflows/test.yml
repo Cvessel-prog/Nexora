@@ -61,7 +61,9 @@ jobs:
       - run: ruff check .
       - run: python scripts/check_release.py
       - run: pip-audit -r requirements.lock.txt
-      - run: npm audit --audit-level=high --registry=https://registry.npmjs.org
+      # Runtime packages are the shipped attack surface. Build/test tooling is
+      # exercised above but is not bundled into the desktop application.
+      - run: npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org
         working-directory: apps/web
       - run: mkdir -p artifacts && cyclonedx-py requirements requirements.lock.txt --output-reproducible --of JSON -o artifacts/python-sbom.json
       - run: npm sbom --sbom-format cyclonedx > ../../artifacts/node-sbom.json
@@ -71,6 +73,7 @@ jobs:
           name: phase6-sbom
           path: artifacts/*.json
       - run: python tests/test_launcher.py
+      - run: python tests/test_installer_contract.py
       - run: npx playwright install --with-deps chromium
         working-directory: apps/web
       - run: npm run e2e
@@ -99,7 +102,10 @@ jobs:
         working-directory: apps/web
       - run: npm run build
         working-directory: apps/web
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_win_acl.py tests/test_desktop_shell.py tests/test_launcher_runtime.py
       - run: python tests/test_launcher.py
+      - run: python tests/test_installer_contract.py
       - run: python scripts/check_release.py
 
   windows-installer-smoke:

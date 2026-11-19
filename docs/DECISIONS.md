@@ -11,4 +11,6 @@
 9. **Local-first security audit**：审计链在 Vault 内防篡改并在完整性失败时阻断受保护操作；暂不依赖外部透明度服务。
 10. **Explicit provider authorization**：Provider 调用需 provider/scope 授权、精确 payload 预览、逐次决定和本地审计；无授权不联网。
 11. **Conflict-safe writes and recovery**：正式写入使用锁、revision、原子替换/事务；恢复前创建安全备份，不静默合并或覆盖。
-12. **Windows without Electron/Tauri**：当前形态是 Python/FastAPI + 静态 React + 本地 launcher/installer，降低桌面运行时复杂度。
+12. **Windows without Electron/Tauri**：保持 Python/FastAPI + 静态 React + 本地 launcher/installer，降低桌面运行时复杂度。`desktop_shell.py` 按 pywebview/WebView2 → Edge `--app` → 系统浏览器三级降级；窗口不可用只影响外壳，不影响本地服务与数据。
+13. **Windows secrets use explicit DACL**：`os.chmod` 在 Windows 不建立 DACL；`core/win_acl.py` 写入仅当前用户 SID 的受保护 DACL，并在既有文件 DACL 被破坏时只修权限、不轮换 `binding.key`，否则会破坏受管备份绑定。
+14. **Navigation exposes domains, not modules**：一级导航只呈现产品域（概览、记忆、档案、复盘、成长、数据、连接、隐私、设置），子能力留在 hub tabs 中并保持可直接寻址；概念关系用常驻概念地图解释，而不是把内部架构铺进导航。

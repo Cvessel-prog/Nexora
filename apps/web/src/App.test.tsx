@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { vaultHint } from './vaultHints'
@@ -182,14 +182,16 @@ describe('review workspace', () => {
     await screen.findByText('先给结论')
     expect(screen.getByText('确认边界已启用')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /全息关系图谱的视觉框架/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '记忆' }))
     fireEvent.click(screen.getByRole('button', { name: '记忆时间线' }))
     await screen.findByRole('button', { name: '查看确认摘要' })
     expect(screen.queryByText('回答先给结论。')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '查看确认摘要' }))
     expect(screen.getByText('回答先给结论。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '隐私审计' }))
+    fireEvent.click(screen.getByRole('button', { name: '隐私与审计' }))
     await screen.findByRole('heading', { name: 'Security Center' })
     expect(screen.getAllByText('尚无审计记录').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: '成长' }))
     fireEvent.click(screen.getByRole('button', { name: 'Human 3.0趋势' }))
     await screen.findByText('还没有已确认的复盘')
     // 断言实际访问过的端点，而不是请求总数——请求数依赖 useEffect 的时序顺序。
@@ -205,10 +207,12 @@ describe('review workspace', () => {
     const { calls } = mockApi({
       '/api/v1/memories': [memory],
       '/api/v1/memory-stats': stats,
+      '/api/v1/monthly-reflections': { currentMonth: '2026-11', reflections: [] },
       '/api/v1/visualization/monthly': { disclaimer: '月度复盘仅用于自我反思，不推断成长分数。', dimensions: [{ key: 'mind', title: 'MIND — 认知与思维' }, { key: 'body', title: 'BODY — 身体与精力' }, { key: 'spirit', title: 'SPIRIT — 意义与关系' }, { key: 'vocation', title: 'VOCATION — 工作与创造' }], points: [] },
     })
     render(<App />)
     await connect()
+    fireEvent.click(screen.getByRole('button', { name: '复盘' }))
     fireEvent.click(screen.getByRole('button', { name: '月度趋势' }))
     await screen.findByText('还没有已确认的月度复盘')
     expect(calls).toContain('/api/v1/visualization/monthly')
@@ -226,7 +230,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
-    fireEvent.click(screen.getByRole('button', { name: '成长仪表盘' }))
+    fireEvent.click(screen.getByRole('button', { name: '成长' }))
     await screen.findByText('Personal Growth Intelligence')
   })
 
@@ -279,7 +283,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
-    fireEvent.click(screen.getByRole('button', { name: '隐私审计' }))
+    fireEvent.click(screen.getByRole('button', { name: '隐私与审计' }))
     fireEvent.click(screen.getByRole('button', { name: '断开连接' }))
     fireEvent.change(screen.getByLabelText('本地启动令牌'), { target: { value: 'new-token' } })
     fireEvent.click(screen.getByRole('button', { name: '连接审核空间' }))
@@ -297,6 +301,32 @@ describe('review workspace', () => {
     expect(screen.queryByRole('button', { name: '对话式引导' })).not.toBeInTheDocument()
   })
 
+  it('collects operational settings and keeps the concept map available', async () => {
+    mockApi({
+      '/api/v1/memories': [memory],
+      '/api/v1/memory-stats': stats,
+      '/api/v1/vault': { vaultId: 'v1', displayName: '我的个人空间', schemaVersion: 1, revision: 'r1', externalChange: false, watched: true },
+      '/api/v1/backups': { currentRevision: 'r1', backups: [] },
+      '/api/v1/providers/adapters': { providers: {}, defaultBaseUrls: {}, configured: [] },
+      '/api/v1/github/status': { configured: false, sessionActive: false, connected: false, repository: '', visibilityVerified: '', remoteName: '', remoteHost: '', lastVerifiedAt: '' },
+      '/api/v1/security/overview': securityOverview,
+    })
+    render(<App />)
+    await connect()
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    await screen.findByText('外观与语言')
+    expect(screen.getByText('关于 NEXORA')).toBeInTheDocument()
+    expect(screen.getByText('v1.0.4')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '打开概念地图' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('这些东西怎么连在一起')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Vault 是唯一事实源/)).toBeInTheDocument()
+    expect(within(dialog).getByText('AI 连接 ≠ 授权记录')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭概念地图' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('creates a persistent monthly reflection draft', async () => {
     const reflection = {
       id: 'mr-2026-11-1234abcd', month: '2026-11', status: 'draft', dimensions: { mind: '', body: '', spirit: '', vocation: '' },
@@ -309,7 +339,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect('暂时没有候选记忆')
-    fireEvent.click(screen.getByRole('button', { name: '月度复盘' }))
+    fireEvent.click(screen.getByRole('button', { name: '复盘' }))
     const create = await screen.findAllByRole('button', { name: /创建 2026-11 复盘/ })
     fireEvent.click(create[0])
     await screen.findByText('本月复盘草稿已创建并保存在本地。')
@@ -328,7 +358,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect('暂时没有候选记忆')
-    fireEvent.click(screen.getByRole('button', { name: '月度复盘' }))
+    fireEvent.click(screen.getByRole('button', { name: '复盘' }))
     const confirm = await screen.findByRole('button', { name: '确认正式复盘' })
     expect(confirm).toBeDisabled()
     expect(screen.getByText(/不会自动评分或生成成长标签/)).toBeInTheDocument()
@@ -370,6 +400,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
+    fireEvent.click(screen.getByRole('button', { name: '数据' }))
     fireEvent.click(screen.getByRole('button', { name: 'GitHub 备份' }))
     await screen.findByText('当前状态')
     expect(screen.getByText(/不保存 token/)).toBeInTheDocument()
@@ -385,6 +416,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
+    fireEvent.click(screen.getByRole('button', { name: '连接' }))
     fireEvent.click(screen.getByRole('button', { name: 'AI Provider' }))
     await screen.findByText('已授权 Provider')
     expect(screen.getByText(/还没有授权任何 Provider/)).toBeInTheDocument()
@@ -420,6 +452,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
+    fireEvent.click(screen.getByRole('button', { name: '数据' }))
     fireEvent.click(screen.getByRole('button', { name: '导入' }))
     fireEvent.change(screen.getByLabelText('导入内容'), { target: { value: '---\ntype: preference\n---\n回答先给结论。' } })
     fireEvent.click(screen.getByRole('button', { name: '预览' }))
@@ -443,6 +476,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
+    fireEvent.click(screen.getByRole('button', { name: '数据' }))
     fireEvent.click(screen.getByRole('button', { name: '备份与恢复' }))
     await screen.findByRole('heading', { name: '版本历史' })
     expect(screen.getByText('chore: update')).toBeInTheDocument()
@@ -462,6 +496,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
+    fireEvent.click(screen.getByRole('button', { name: '数据' }))
     fireEvent.click(screen.getByRole('button', { name: '备份与恢复' }))
     await screen.findByRole('button', { name: '预览变更' })
     fireEvent.click(screen.getByRole('button', { name: '预览变更' }))
@@ -506,6 +541,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
+    fireEvent.click(screen.getByRole('button', { name: '数据' }))
     fireEvent.click(screen.getByRole('button', { name: '备份与恢复' }))
     await screen.findByRole('button', { name: '恢复到此提交' })
     fireEvent.click(screen.getByRole('button', { name: '恢复到此提交' }))
@@ -565,6 +601,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
+    fireEvent.click(screen.getByRole('button', { name: '连接' }))
     fireEvent.click(screen.getByRole('button', { name: 'AI Provider' }))
     await screen.findByText('连接器')
     fireEvent.change(screen.getByLabelText('连接器 Base URL'), { target: { value: 'http://127.0.0.1:8080/v1' } })
