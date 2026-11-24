@@ -151,11 +151,20 @@ def call(provider: str, request_id: str) -> dict[str, Any]:
         if not config:
             raise AdapterError(f"Provider 未配置：{provider}")
         approved = provider_auth.approved_payload(request_id)
+        if approved["provider"] != provider:
+            raise AdapterError(f"调用目标与批准的 Provider 不一致：批准 {approved['provider']}，请求 {provider}")
         prompt = provider_auth.build_prompt(approved["scope"], approved["payload"])
         result = _ADAPTERS[provider](config, prompt)
-        provider_auth.audit_call(request_id, provider, approved["scope"], "ok", result.get("model", ""), int(result.get("usage", {}).get("total_tokens", 0)))
-        return {"ok": True, "text": result["text"], "model": result["model"], "usage": result["usage"], "latencyMs": int((time.monotonic() - started) * 1000)}
     except Exception as exc:  # noqa: BLE001 - a failing provider must never break the app
         with contextlib.suppress(Exception):
             provider_auth.audit_call(request_id, provider, "", "error", "", 0, reason=str(exc))
         return {"ok": False, "error": str(exc)[:300], "latencyMs": int((time.monotonic() - started) * 1000)}
+    try:
+        provider_auth.audit_call(request_id, provider, approved["scope"], "ok", result.get("model", ""), int(result.get("usage", {}).get("total_tokens", 0)))
+    except Exception as exc:  # the remote side effect happened; never hide missing audit evidence
+        return {
+            "ok": False, "error": f"Provider 请求成功，但成功审计写入失败：{exc}"[:300],
+            "providerCallSucceeded": True, "auditRecorded": False,
+            "latencyMs": int((time.monotonic() - started) * 1000),
+        }
+    return {"ok": True, "text": result["text"], "model": result["model"], "usage": result["usage"], "auditRecorded": True, "latencyMs": int((time.monotonic() - started) * 1000)}

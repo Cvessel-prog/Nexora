@@ -355,7 +355,10 @@ def main():
         default = client.get("/api/v1/vaults/default-path", headers=headers)
         assert default.status_code == 200 and default.json()["data"]["path"], default.text
 
-        browse = client.post("/api/v1/vaults/browse", headers=headers)
+        # The native folder picker cannot run under TestClient (it would block on
+        # a modal dialog). Exercise the endpoint's unavailable-picker boundary.
+        with patch.object(api_main, "browse_directory", side_effect=RuntimeError("picker unavailable in tests")):
+            browse = client.post("/api/v1/vaults/browse", headers=headers)
         assert browse.status_code in (200, 409), browse.text
 
         forget = client.delete(f"/api/v1/vaults/{current_id}", headers=headers)

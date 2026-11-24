@@ -1,0 +1,4 @@
+# Optional native desktop window host (WebView2 on Windows).
+# Installed separately from the hash-locked runtime requirements so headless
+# servers and CI test jobs do not need a GUI toolkit.
+pywebview==6.2.1

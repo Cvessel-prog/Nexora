@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Brain, CalendarDots, ChartLineUp, CloudArrowUp, Database, GithubLogo, HardDrives, House, List, LockKey, Network, PlugsConnected, ShieldCheck, Sparkle, Stack, UserCircle, Warning, X } from '@phosphor-icons/react'
+import { BookOpen, CalendarDots, Database, GearSix, HardDrives, House, List, LockKey, Network, PlugsConnected, ShieldCheck, Sparkle, Stack, UserCircle, Warning, X } from '@phosphor-icons/react'
 import { ApiClient, ApiError, type Human3Trend, type Memory, type MemoryStats, type MonthlyOverview, type MonthlyReflection, type MonthlyTrend, type ProfileOverview, type ReflectionDimension, type ReflectionEvent, type ReflectionGoal, type SecurityCenter, type TimelineItem } from './api'
 import MemoryReviewPage from './MemoryReviewPage'
 import MonthlyReflectionPage from './MonthlyReflectionPage'
@@ -10,6 +10,8 @@ import GrowthDashboard from './GrowthDashboard'
 import OverviewPage from './OverviewPage'
 import BackupRecoveryPage from './BackupRecoveryPage'
 import GitHubBackupPage from './GitHubBackupPage'
+import SettingsPage from './SettingsPage'
+import ConceptGuide from './ConceptGuide'
 
 import ProviderAuthPage from './ProviderAuthPage'
 
@@ -23,15 +25,39 @@ import type { Language } from './i18n'
 import './App.css'
 
 type Notice = { kind: 'success' | 'error'; text: string } | null
-type View = 'overview' | 'review' | 'profile' | 'timeline' | 'privacy' | 'reflection' | 'human3' | 'monthly' | 'growth' | 'backup' | 'connections' | 'import' | 'providers' | 'github'
+export type View = 'overview' | 'review' | 'profile' | 'timeline' | 'privacy' | 'reflection' | 'human3' | 'monthly' | 'growth' | 'backup' | 'connections' | 'import' | 'providers' | 'github' | 'data' | 'settings'
 
 const VIEW_ROUTES: Record<View, string> = {
   overview: '#/overview', review: '#/memory-review', profile: '#/profile',
   timeline: '#/memory-timeline', privacy: '#/privacy-audit', reflection: '#/monthly-reflection',
   human3: '#/human-3', monthly: '#/monthly-trend', growth: '#/growth-dashboard', backup: '#/backup-recovery', connections: '#/ai-connections', providers: '#/providers', import: '#/import', github: '#/github-backup',
+  data: '#/data', settings: '#/settings',
 }
 const ROUTE_VIEWS = new Map(Object.entries(VIEW_ROUTES).map(([view, route]) => [route, view as View]))
 function viewFromHash(hash: string): View | null { return ROUTE_VIEWS.get(hash) ?? null }
+
+/** Navigation hubs own the navigation entry; their tabs stay reachable as routes. */
+const HUB_MEMBERS: Partial<Record<View, View[]>> = {
+  review: ['review', 'timeline'],
+  reflection: ['reflection', 'monthly'],
+  growth: ['growth', 'human3'],
+  data: ['data', 'backup', 'github', 'import'],
+  connections: ['connections', 'providers'],
+}
+
+function navigationActive(item: View, current: View) {
+  return item === current || Boolean(HUB_MEMBERS[item]?.includes(current))
+}
+
+type HubTab = { label: string; view: View; active: boolean }
+function HubTabs({ label, description, tabs, onSelect }: { label: string; description: string; tabs: HubTab[]; onSelect: (view: View) => void }) {
+  return <section className="hub-bar" aria-label={label}>
+    <div><p className="eyebrow">{label}</p><p>{description}</p></div>
+    <nav className="hub-tabs" aria-label={label}>
+      {tabs.map((tab) => <button key={tab.view} className={tab.active ? 'active' : ''} aria-pressed={tab.active} onClick={() => onSelect(tab.view)}>{tab.label}</button>)}
+    </nav>
+  </section>
+}
 
 type TokenGateProps = {
   error: string
@@ -109,10 +135,14 @@ function App() {
   const [vaultEpoch, setVaultEpoch] = useState(0)
   const [language, changeLanguage] = useLanguage()
   const t = useT()
-  const [highContrast, setHighContrast] = useState(false)
+  const [conceptOpen, setConceptOpen] = useState(false)
+  const [highContrast, setHighContrast] = useState(() => {
+    try { return localStorage.getItem('nexora.contrast') === 'high' } catch { return false }
+  })
 
   useEffect(() => {
     document.documentElement.classList.toggle('high-contrast', highContrast)
+    try { localStorage.setItem('nexora.contrast', highContrast ? 'high' : 'standard') } catch { /* storage unavailable */ }
   }, [highContrast])
   const sessionEpoch = useRef(0)
   const viewRequest = useRef(0)
@@ -270,7 +300,12 @@ function App() {
   useEffect(() => {
     if (!navigationOpen) return
     const frame = window.requestAnimationFrame(() => {
-      sidebarRef.current?.querySelector<HTMLButtonElement>('nav button[aria-current="page"]')?.focus()
+      const sidebar = sidebarRef.current
+      if (!sidebar) return
+      // 只在焦点仍停在菜单按钮或抽屉外时才接管；如果用户已经把焦点移进抽屉，就不要抢。
+      const active = document.activeElement
+      if (active && active !== menuButtonRef.current && sidebar.contains(active)) return
+      sidebar.querySelector<HTMLButtonElement>('nav button[aria-current="page"]')?.focus()
     })
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -355,7 +390,7 @@ function App() {
     }
     setVisualLoading(null)
     if (next === 'review') { void loadCandidates(); return }
-    if (next === 'growth' || next === 'backup' || next === 'overview' || next === 'connections' || next === 'providers' || next === 'import' || next === 'github') return
+    if (next === 'growth' || next === 'backup' || next === 'overview' || next === 'connections' || next === 'providers' || next === 'import' || next === 'github' || next === 'data' || next === 'settings') return
     const controller = new AbortController()
     visualAbort.current = controller
     const epoch = sessionEpoch.current
@@ -490,38 +525,39 @@ function App() {
     }}
   />
 
-  const navigationGroups: { title: string; items: { label: string; view?: View; icon: typeof House }[] }[] = [
+  const navigationGroups: { title: string; items: { label: string; view: View; icon: typeof House }[] }[] = [
     {
       title: t('nav.group.core'),
       items: [
         { label: t('nav.overview'), view: 'overview', icon: House },
-        { label: t('nav.review'), view: 'review', icon: Stack },
+        { label: t('nav.memory'), view: 'review', icon: Stack },
         { label: t('nav.profile'), view: 'profile', icon: UserCircle },
       ],
     },
     {
       title: t('nav.group.records'),
       items: [
-        { label: t('nav.import'), view: 'import', icon: CloudArrowUp },
         { label: t('nav.reflection'), view: 'reflection', icon: CalendarDots },
-        { label: t('nav.monthly'), view: 'monthly', icon: ChartLineUp },
-        { label: t('nav.human3'), view: 'human3', icon: Brain },
         { label: t('nav.growth'), view: 'growth', icon: Sparkle },
-        { label: t('nav.timeline'), view: 'timeline', icon: CalendarDots },
       ],
     },
     {
       title: t('nav.group.system'),
       items: [
-        { label: t('nav.privacy'), view: 'privacy', icon: ShieldCheck },
-        { label: t('nav.backup'), view: 'backup', icon: HardDrives },
+        { label: t('nav.data'), view: 'data', icon: HardDrives },
         { label: t('nav.connections'), view: 'connections', icon: PlugsConnected },
-        { label: t('nav.github'), view: 'github', icon: GithubLogo },
-        { label: t('nav.providers'), view: 'providers', icon: LockKey },
+        { label: t('nav.privacy'), view: 'privacy', icon: ShieldCheck },
+        { label: t('nav.settings'), view: 'settings', icon: GearSix },
       ],
     },
   ]
-  const titles: Record<View, string> = { overview: t('title.overview'), review: t('nav.review'), profile: t('nav.profile'), timeline: t('nav.timeline'), privacy: t('nav.privacy'), reflection: t('nav.reflection'), human3: t('nav.human3'), monthly: t('nav.monthly'), growth: t('nav.growth'), backup: t('nav.backup'), connections: t('nav.connections'), providers: t('nav.providers'), import: t('nav.import'), github: t('nav.github') }
+  const titles: Record<View, string> = {
+    overview: t('title.overview'), review: t('title.memory'), profile: t('nav.profile'),
+    timeline: t('title.memory'), privacy: t('title.privacy'), reflection: t('title.reflection'),
+    human3: t('title.growth'), monthly: t('title.reflection'), growth: t('title.growth'),
+    backup: t('title.data'), connections: t('title.connections'), providers: t('title.connections'),
+    import: t('title.data'), github: t('title.data'), data: t('title.data'), settings: t('title.settings'),
+  }
 
   function closeNavigation() {
     setNavigationOpen(false)
@@ -537,35 +573,66 @@ function App() {
       <nav aria-label={t('a11y.navSection')}>
         {navigationGroups.map((group) => <div className="nav-group" key={group.title}>
           <p className="nav-group-title">{group.title}</p>
-          {group.items.map((item) => { const Icon = item.icon; const active = item.view === view || (item.view === 'profile' && view === 'timeline'); return <button key={item.label} className={active ? 'active' : ''} aria-label={item.view === 'human3' ? t('app.human3Trend') : undefined} aria-current={active ? 'page' : undefined} aria-disabled={!item.view} title={!item.view ? t('app.comingSoon') : undefined} onClick={() => { if (item.view) { void openView(item.view); setNavigationOpen(false); if (item.view === view) window.requestAnimationFrame(() => titleRef.current?.focus({ preventScroll: true })) } }}><Icon size={21} weight={active ? 'duotone' : 'regular'} /><span>{item.label}</span>{!item.view && <small>{t('app.soonTag')}</small>}</button> })}
+          {group.items.map((item) => { const Icon = item.icon; const active = navigationActive(item.view, view); return <button key={item.label} className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} onClick={() => { void openView(item.view); setNavigationOpen(false); if (item.view === view) window.requestAnimationFrame(() => titleRef.current?.focus({ preventScroll: true })) }}><Icon size={21} weight={active ? 'duotone' : 'regular'} /><span>{item.label}</span></button> })}
         </div>)}
       </nav>
+      <button className="concept-link" onClick={() => { setConceptOpen(true); setNavigationOpen(false) }}><BookOpen size={18} /><span>{t('concepts.open')}</span></button>
       <div className="sidebar-status"><p><Database size={17} /><span>本地服务</span><strong>已连接</strong></p><p><LockKey size={17} /><span>Vault</span><strong>受保护</strong></p></div>
     </aside>
 
     <section ref={stageRef} id="main-content" className={`app-stage ${view === 'overview' ? 'with-status' : ''}`} tabIndex={-1} aria-label={t('a11y.main')}>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{navigationAnnouncement}</div>
-      <header className="topbar"><div><p className="eyebrow">HOLOGRAPHIC LIBRARY</p><h1 ref={titleRef} tabIndex={-1}>{titles[view]}</h1></div><div className="topbar-actions"><span className="service-status"><i />{t('topbar.localService')}</span><span className="service-status"><i />{t('topbar.vaultReady')}</span><button className="text-button" onClick={() => setHighContrast((current) => !current)} aria-pressed={highContrast}>{highContrast ? t('app.contrastStandard') : t('app.contrastHigh')}</button><label className="language-switch"><span className="sr-only">{t('topbar.language')}</span><select aria-label={t('topbar.language')} value={language} onChange={(event) => changeLanguage(event.target.value as Language)}>{LANGUAGES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><button className="icon-button" aria-label={t('topbar.refreshCandidates')} title={t('topbar.refreshCandidates')} onClick={() => void loadCandidates()} disabled={loading}><Database size={19} /></button><button className="text-button" onClick={() => disconnect()}>{t('topbar.disconnect')}</button><button className="text-button danger-link" onClick={() => void shutdown()} disabled={saving}>{t('topbar.shutdown')}</button></div></header>
+      <header className="topbar"><div><p className="eyebrow">HOLOGRAPHIC LIBRARY</p><h1 ref={titleRef} tabIndex={-1}>{titles[view]}</h1></div><div className="topbar-actions"><span className="service-status"><i />{t('topbar.localService')}</span><span className="service-status"><i />{t('topbar.vaultReady')}</span><button className="icon-button concept-button" aria-label={t('concepts.open')} title={t('concepts.open')} onClick={() => setConceptOpen(true)}><BookOpen size={19} /></button><button className="text-button" onClick={() => setHighContrast((current) => !current)} aria-pressed={highContrast}>{highContrast ? t('app.contrastStandard') : t('app.contrastHigh')}</button><label className="language-switch"><span className="sr-only">{t('topbar.language')}</span><select aria-label={t('topbar.language')} value={language} onChange={(event) => changeLanguage(event.target.value as Language)}>{LANGUAGES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><button className="icon-button" aria-label={t('topbar.refreshCandidates')} title={t('topbar.refreshCandidates')} onClick={() => void loadCandidates()} disabled={loading}><Database size={19} /></button><button className="text-button" onClick={() => disconnect()}>{t('topbar.disconnect')}</button><button className="text-button danger-link" onClick={() => void shutdown()} disabled={saving}>{t('topbar.shutdown')}</button></div></header>
       <div className="content-shell">
         {externalChange && <div className="external-banner" role="status"><Warning size={20} /><span>{t('external.banner')}</span><button className="text-button" onClick={() => void refreshAfterExternal()}>{t('external.refresh')}</button><button className="text-button" onClick={() => setExternalChange(false)}>{t('external.dismiss')}</button></div>}
         {notice && <div className={`notice ${notice.kind}`} role="status"><span>{notice.text}</span>{notice.kind === 'error' && <button onClick={() => void loadCandidates()}>{t('common.refresh')}</button>}</div>}
 
-        {view === 'reflection' && <MonthlyReflectionPage overview={monthlyView} selected={reflectionView} loading={visualLoading === 'reflection'} saving={saving} onSelect={setReflectionView} onCreate={createReflection} onDimension={saveReflectionDimension} onAddEvent={addReflectionEvent} onDeleteEvent={deleteReflectionEvent} onGoals={saveReflectionGoals} onGenerateSummary={generateReflectionSummary} onSummary={saveReflectionSummary} onConfirm={confirmReflection} />}
+        {(view === 'review' || view === 'timeline') && <>
+          <HubTabs label={t('title.memory')} description={t('hub.memory.desc')} tabs={[
+            { label: t('nav.review'), view: 'review', active: view === 'review' },
+            { label: t('nav.timeline'), view: 'timeline', active: view === 'timeline' },
+          ]} onSelect={(next) => void openView(next)} />
+          {view === 'review' && <MemoryReviewPage memories={memories} stats={memoryStats} selected={selected} draft={draft} rejectionReason={rejectionReason} loading={loading} saving={saving} onSelect={(memory) => { setSelectedId(memory.id); setDraft(memory.content); setRejectionReason('') }} onDraft={setDraft} onRejectionReason={setRejectionReason} onSave={save} onAct={act} onOnboarding={() => void openView('profile')} />}
+          {view === 'timeline' && <TimelinePage value={timelineView} loading={visualLoading === 'timeline'} />}
+        </>}
+        {(view === 'reflection' || view === 'monthly') && <>
+          <HubTabs label={t('title.reflection')} description={t('hub.reflection.desc')} tabs={[
+            { label: t('nav.monthlyReflection'), view: 'reflection', active: view === 'reflection' },
+            { label: t('nav.monthly'), view: 'monthly', active: view === 'monthly' },
+          ]} onSelect={(next) => void openView(next)} />
+          {view === 'reflection' && <MonthlyReflectionPage overview={monthlyView} selected={reflectionView} loading={visualLoading === 'reflection'} saving={saving} onSelect={setReflectionView} onCreate={createReflection} onDimension={saveReflectionDimension} onAddEvent={addReflectionEvent} onDeleteEvent={deleteReflectionEvent} onGoals={saveReflectionGoals} onGenerateSummary={generateReflectionSummary} onSummary={saveReflectionSummary} onConfirm={confirmReflection} />}
+          {view === 'monthly' && <MonthlyTrendPage value={monthlyTrendView} loading={visualLoading === 'monthly'} />}
+        </>}
+        {(view === 'growth' || view === 'human3') && <>
+          <HubTabs label={t('title.growth')} description={t('hub.growth.desc')} tabs={[
+            { label: t('nav.growthDashboard'), view: 'growth', active: view === 'growth' },
+            { label: t('nav.human3Trend'), view: 'human3', active: view === 'human3' },
+          ]} onSelect={(next) => void openView(next)} />
+          {view === 'growth' && client && <GrowthDashboard client={client} />}
+          {view === 'human3' && <Human3Page value={human3View} loading={visualLoading === 'human3'} />}
+        </>}
+        {(view === 'data' || view === 'backup' || view === 'github' || view === 'import') && <>
+          <HubTabs label={t('title.data')} description={t('hub.data.desc')} tabs={[
+            { label: t('nav.backup'), view: 'backup', active: view === 'data' || view === 'backup' },
+            { label: t('nav.github'), view: 'github', active: view === 'github' },
+            { label: t('nav.import'), view: 'import', active: view === 'import' },
+          ]} onSelect={(next) => void openView(next)} />
+          {(view === 'data' || view === 'backup') && client && <BackupRecoveryPage client={client} refreshKey={vaultEpoch} />}
+          {view === 'github' && client && <GitHubBackupPage client={client} />}
+          {view === 'import' && client && <ImportPage client={client} />}
+        </>}
+        {(view === 'connections' || view === 'providers') && <>
+          <HubTabs label={t('title.connections')} description={t('hub.connections.desc')} tabs={[
+            { label: t('nav.connectionsMcp'), view: 'connections', active: view === 'connections' },
+            { label: t('nav.providers'), view: 'providers', active: view === 'providers' },
+          ]} onSelect={(next) => void openView(next)} />
+          {view === 'connections' && client && <AIConnectionsPage client={client} />}
+          {view === 'providers' && client && <ProviderAuthPage client={client} />}
+        </>}
         {view === 'profile' && <ProfilePage value={profileView} loading={visualLoading === 'profile'} relationshipMap={relationshipMap} onReview={() => void openView('review')} onTimeline={() => void openView('timeline')} />}
-        {view === 'timeline' && <TimelinePage value={timelineView} loading={visualLoading === 'timeline'} />}
         {view === 'privacy' && <SecurityCenterPage value={securityView} loading={visualLoading === 'privacy'} saving={saving} credential={clientCredential} onAuthorize={authorizeSecurityClient} onScopes={updateSecurityScopes} onRevoke={revokeSecurityClient} onQuery={querySecurityEvents} onClearCredential={() => setClientCredential('')} />}
-        {view === 'human3' && <Human3Page value={human3View} loading={visualLoading === 'human3'} />}
-        {view === 'monthly' && <MonthlyTrendPage value={monthlyTrendView} loading={visualLoading === 'monthly'} />}
-        {view === 'growth' && client && <GrowthDashboard client={client} />}
-        {view === 'backup' && client && <BackupRecoveryPage client={client} refreshKey={vaultEpoch} />}
-        {view === 'overview' && client && <OverviewPage client={client} onNavigate={(next) => void openView(next)} refreshKey={vaultEpoch} />}
-        {view === 'connections' && client && <AIConnectionsPage client={client} />}
-        {view === 'github' && client && <GitHubBackupPage client={client} />}
-
-        {view === 'providers' && client && <ProviderAuthPage client={client} />}
-
-        {view === 'import' && client && <ImportPage client={client} />}
-        {view === 'review' && <MemoryReviewPage memories={memories} stats={memoryStats} selected={selected} draft={draft} rejectionReason={rejectionReason} loading={loading} saving={saving} onSelect={(memory) => { setSelectedId(memory.id); setDraft(memory.content); setRejectionReason('') }} onDraft={setDraft} onRejectionReason={setRejectionReason} onSave={save} onAct={act} onOnboarding={() => void openView('profile')} />}
+        {view === 'overview' && client && <OverviewPage client={client} onNavigate={(next) => void openView(next)} onConcepts={() => setConceptOpen(true)} refreshKey={vaultEpoch} />}
+        {view === 'settings' && client && <SettingsPage client={client} language={language} onLanguage={changeLanguage} highContrast={highContrast} onHighContrast={setHighContrast} onOpenConcepts={() => setConceptOpen(true)} onNavigate={(next) => void openView(next)} />}
       </div>
     </section>
 
@@ -579,6 +646,7 @@ function App() {
       </dl>
       <button className="text-button" onClick={() => void loadCandidates()}>{t('app.refreshStatus')}</button>
     </aside>}
+    <ConceptGuide open={conceptOpen} onClose={() => setConceptOpen(false)} />
   </main>
 }
 

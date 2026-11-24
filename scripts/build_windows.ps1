@@ -15,6 +15,12 @@ if ($LASTEXITCODE -ne 0) { throw "npm run build failed with exit code $LASTEXITC
 Pop-Location
 
 Write-Host "==> Building backend with PyInstaller"
+python -c "import webview" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "==> Installing desktop window dependency"
+    python -m pip install -r requirements-desktop.txt
+    if ($LASTEXITCODE -ne 0) { throw "desktop dependency install failed with exit code $LASTEXITCODE" }
+}
 python -m PyInstaller --clean --noconfirm packaging\windows\personal-ai-profile.spec
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 $AppExe = "$Root\dist\personal-ai-profile\personal-ai-profile.exe"

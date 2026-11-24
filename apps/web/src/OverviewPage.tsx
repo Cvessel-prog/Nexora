@@ -6,7 +6,8 @@ import { formatDate, getLanguage, useT } from './i18n'
 
 type Props = {
   client: ApiClient
-  onNavigate: (view: 'review' | 'profile' | 'privacy' | 'reflection' | 'growth') => void
+  onNavigate: (view: 'review' | 'profile' | 'privacy' | 'reflection' | 'growth' | 'connections' | 'backup') => void
+  onConcepts: () => void
   refreshKey?: number
 }
 
@@ -33,7 +34,7 @@ function accessLabel(access: string) {
  * - 不在面板底部重复状态行；补充信息并入正文或右侧面板。
  * - 正文行高放宽，字号提高，让每块内容只有一句话的读法。
  */
-export default function OverviewPage({ client, onNavigate, refreshKey = 0 }: Props) {
+export default function OverviewPage({ client, onNavigate, onConcepts, refreshKey = 0 }: Props) {
   const t = useT()
   const [value, setValue] = useState<Snapshot | null>(null)
   const [loading, setLoading] = useState(true)
@@ -106,6 +107,12 @@ export default function OverviewPage({ client, onNavigate, refreshKey = 0 }: Pro
       <div className="welcome-identity"><span className="welcome-identity-icon"><UserCircle size={22} weight="duotone" /></span><div><strong>{spaceName}</strong></div></div>
     </header>
 
+    <section className="home-concepts" aria-label={t('overview.conceptsLabel')}>
+      <div><p className="eyebrow">{t('overview.conceptsEyebrow')}</p><h2>{t('overview.conceptsTitle')}</h2><p>{t('overview.conceptsDetail')}</p></div>
+      <div className="home-concept-tags" aria-hidden="true"><span>{t('overview.conceptVault')}</span><span>{t('overview.conceptObsidian')}</span><span>{t('overview.conceptSnapshots')}</span><span>{t('overview.conceptGitHub')}</span><span>{t('overview.conceptMcp')}</span><span>{t('overview.conceptProvider')}</span></div>
+      <button className="secondary-action" onClick={onConcepts}>{t('overview.openConceptMap')}</button>
+    </section>
+
     {next && <section className="home-next" aria-label={t('overview.nextLabel')}>
       <h2>{t('overview.nextTitle')}</h2>
       <button className="home-next-card" onClick={() => onNavigate(next.view)}>
@@ -131,14 +138,14 @@ export default function OverviewPage({ client, onNavigate, refreshKey = 0 }: Pro
       </section>
 
       <section className="home-panel home-connections" aria-label={t('overview.clientsLabel')}>
-        <header><h2>{t('overview.clientsTitle')}</h2><button className="text-button" onClick={() => onNavigate('privacy')}>{t('overview.manageAccess')}</button></header>
+        <header><h2>{t('overview.clientsTitle')}</h2><button className="text-button" onClick={() => onNavigate('connections')}>{t('overview.manageConnections')}</button></header>
         {clients.total === 0
-          ? <EmptyState icon={<ShieldCheck size={24} />} title={t('overview.noClientsTitle')} description={t('overview.noClientsDetail') + (recentSummary(recentAccess) === t('overview.noAiAccess') ? '' : ' ' + t('overview.recentAccess', { summary: recentSummary(recentAccess) }))} action={<button className="primary-action" onClick={() => onNavigate('privacy')}>{t('overview.viewConnections')}</button>} />
+          ? <EmptyState icon={<ShieldCheck size={24} />} title={t('overview.noClientsTitle')} description={t('overview.noClientsDetail') + (recentSummary(recentAccess) === t('overview.noAiAccess') ? '' : ' ' + t('overview.recentAccess', { summary: recentSummary(recentAccess) }))} action={<button className="primary-action" onClick={() => onNavigate('connections')}>{t('overview.viewConnections')}</button>} />
           : <ul className="home-client-list">{clients.active.map((client) => <li key={client.id}><ShieldCheck size={17} /><div><strong>{client.name}</strong><small>{t('overview.scopesAndActivity', { count: client.scopes.length, activity: client.activity === 'recently_active' ? t('overview.recentlyActive') : t('overview.notConnected') })}</small></div></li>)}</ul>}
       </section>
 
       <section className="home-panel home-vault" aria-label={t('overview.vaultLabel')}>
-        <header><h2>{t('overview.vaultTitle')}</h2></header>
+        <header><h2>{t('overview.vaultTitle')}</h2><button className="text-button" onClick={() => onNavigate('backup')}>{t('overview.manageData')}</button></header>
         <dl className="home-vault-list">
           <div><dt>{t('overview.backupCount')}</dt><dd>{backups.length}</dd></div>
           <div><dt>{t('overview.latestBackup')}</dt><dd>{latestBackup ? displayTime(latestBackup.created) : t('overview.noBackup')}</dd></div>

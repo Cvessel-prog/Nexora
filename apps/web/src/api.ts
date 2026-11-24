@@ -184,6 +184,7 @@ export class ApiClient {
   previewProviderCall(provider: string, scope: string, context: Record<string, unknown>, signal?: AbortSignal) { return this.request<PendingCall>('/api/v1/providers/preview', { method: 'POST', body: JSON.stringify({ provider, scope, context }), signal }) }
   decideProviderCall(requestId: string, action: 'approve' | 'deny', reason: string, signal?: AbortSignal) { return this.request<ProviderDecision>('/api/v1/providers/calls', { method: 'POST', body: JSON.stringify({ request_id: requestId, action, reason }), signal }) }
   providerAudit(signal?: AbortSignal) { return this.request<ProviderAudit>('/api/v1/providers/audit', { signal }) }
+  securityOverview(signal?: AbortSignal) { return this.request<SecurityOverview>('/api/v1/security/overview', { signal }) }
   providerAdapters(signal?: AbortSignal) { return this.request<ProviderAdaptersOverview>('/api/v1/providers/adapters', { signal }) }
   configureProvider(provider: string, baseUrl: string, model: string, apiKey: string, timeout = 30, signal?: AbortSignal) { return this.request<ProviderAdapterInfo>('/api/v1/providers/configure', { method: 'POST', body: JSON.stringify({ provider, base_url: baseUrl, model, api_key: apiKey, timeout }), signal }) }
   removeProviderConfig(provider: string, signal?: AbortSignal) { return this.request<{ provider: string; removed: boolean }>(`/api/v1/providers/${encodeURIComponent(provider)}/config`, { method: 'DELETE', signal }) }
