@@ -49,6 +49,28 @@ def main() -> None:
             assert fake.calls[-1][2]["Authorization"] == "Bearer sk-test", fake.calls[-1]
             assert "sk-test" not in str(result), result
 
+            # 批准必须绑定到同一个 Provider，不能批准 A 后发送给 B。
+            provider_auth.authorize_provider("custom", ["reflection:summary"])
+            mismatch = provider_auth.prepare_call("local-openai", "reflection:summary", {"summary": "target-bound"})
+            provider_auth.decide_call(mismatch["requestId"], "approve")
+            provider_adapters.configure("custom", base_url="http://127.0.0.1:8081/v1", model="other-model")
+            calls_before = len(fake.calls)
+            rejected = provider_adapters.call("custom", mismatch["requestId"])
+            assert rejected["ok"] is False and "Provider 不一致" in rejected["error"], rejected
+            assert len(fake.calls) == calls_before, "目标不匹配时不应发送网络请求"
+
+            # 远端成功后若成功审计失败，必须明确暴露“已发送但无审计”，不能伪装成普通失败。
+            audit_failure = provider_auth.prepare_call("local-openai", "reflection:summary", {"summary": "audit-bound"})
+            provider_auth.decide_call(audit_failure["requestId"], "approve")
+            original_audit = provider_auth.audit_call
+            provider_auth.audit_call = lambda *args, **kwargs: (_ for _ in ()).throw(OSError("audit disk full"))
+            try:
+                unaudited = provider_adapters.call("local-openai", audit_failure["requestId"])
+            finally:
+                provider_auth.audit_call = original_audit
+            assert unaudited["ok"] is False and unaudited["providerCallSucceeded"] is True, unaudited
+            assert unaudited["auditRecorded"] is False and "audit disk full" in unaudited["error"], unaudited
+
             # 同一次批准不能重复使用。
             try:
                 provider_auth.approved_payload(preview["requestId"])

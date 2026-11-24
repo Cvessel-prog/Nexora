@@ -5,7 +5,8 @@ import { EmptyState, ErrorState, LoadingState } from './components/StateBlocks'
 
 type Props = {
   client: ApiClient
-  onNavigate: (view: 'review' | 'profile' | 'privacy' | 'reflection' | 'growth') => void
+  onNavigate: (view: 'review' | 'profile' | 'privacy' | 'reflection' | 'growth' | 'connections' | 'backup') => void
+  onConcepts: () => void
   refreshKey?: number
 }
 
@@ -45,7 +46,7 @@ function recentSummary(events: AuditEvent[]) {
  * - 不在面板底部重复状态行；补充信息并入正文或右侧面板。
  * - 正文行高放宽，字号提高，让每块内容只有一句话的读法。
  */
-export default function OverviewPage({ client, onNavigate, refreshKey = 0 }: Props) {
+export default function OverviewPage({ client, onNavigate, onConcepts, refreshKey = 0 }: Props) {
   const [value, setValue] = useState<Snapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -105,6 +106,12 @@ export default function OverviewPage({ client, onNavigate, refreshKey = 0 }: Pro
       <div className="welcome-identity"><span className="welcome-identity-icon"><UserCircle size={22} weight="duotone" /></span><div><strong>{spaceName}</strong></div></div>
     </header>
 
+    <section className="home-concepts" aria-label="概念关系">
+      <div><p className="eyebrow">HOW IT FITS TOGETHER</p><h2>Vault 是唯一事实源</h2><p>Obsidian 是可选编辑器，本地快照与 GitHub 私有备份是副本，MCP 客户端是授权通道，AI Provider 只接收你逐次批准的最小内容。</p></div>
+      <div className="home-concept-tags" aria-hidden="true"><span>Vault</span><span>Obsidian</span><span>本地快照</span><span>GitHub</span><span>MCP</span><span>Provider</span></div>
+      <button className="secondary-action" onClick={onConcepts}>打开概念地图</button>
+    </section>
+
     {next && <section className="home-next" aria-label="推荐下一步">
       <h2>下一步</h2>
       <button className="home-next-card" onClick={() => onNavigate(next.view)}>
@@ -130,14 +137,14 @@ export default function OverviewPage({ client, onNavigate, refreshKey = 0 }: Pro
       </section>
 
       <section className="home-panel home-connections" aria-label="已授权的 AI 工具">
-        <header><h2>已授权的 AI 工具</h2><button className="text-button" onClick={() => onNavigate('privacy')}>管理授权</button></header>
+        <header><h2>已授权的 AI 工具</h2><button className="text-button" onClick={() => onNavigate('connections')}>管理连接</button></header>
         {clients.total === 0
-          ? <EmptyState icon={<ShieldCheck size={24} />} title="还没有 AI 获得授权" description={`你可以在「AI 连接」里为具体客户端设置最小权限。${recentSummary(recentAccess) === '尚无 AI 访问记录' ? '' : `最近访问：${recentSummary(recentAccess)}。`}`} action={<button className="primary-action" onClick={() => onNavigate('privacy')}>查看 AI 连接</button>} />
+          ? <EmptyState icon={<ShieldCheck size={24} />} title="还没有 AI 获得授权" description={`你可以在「连接」里为具体客户端设置最小权限。${recentSummary(recentAccess) === '尚无 AI 访问记录' ? '' : `最近访问：${recentSummary(recentAccess)}。`}`} action={<button className="primary-action" onClick={() => onNavigate('connections')}>查看 AI 连接</button>} />
           : <ul className="home-client-list">{clients.active.map((client) => <li key={client.id}><ShieldCheck size={17} /><div><strong>{client.name}</strong><small>{client.scopes.length} 项权限 · {client.activity === 'recently_active' ? '最近活跃' : '尚未连接'}</small></div></li>)}</ul>}
       </section>
 
       <section className="home-panel home-vault" aria-label="本地文件与备份">
-        <header><h2>本地文件与备份</h2></header>
+        <header><h2>本地文件与备份</h2><button className="text-button" onClick={() => onNavigate('backup')}>管理数据</button></header>
         <dl className="home-vault-list">
           <div><dt>备份数量</dt><dd>{backups.length}</dd></div>
           <div><dt>最近备份</dt><dd>{latestBackup ? displayTime(latestBackup.created) : '尚无备份'}</dd></div>

@@ -35,9 +35,9 @@ test('keyboard flow reaches main content and every navigation group', async ({ p
   await expect(page.locator('#main-content')).toBeFocused()
 
   // A nav item opens its view with Enter alone.
-  await page.getByRole('button', { name: '备份与恢复' }).focus()
+  await page.getByRole('button', { name: '数据', exact: true }).focus()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('heading', { name: '备份与恢复', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '数据', level: 1 })).toBeVisible()
 })
 
 test('200% zoom keeps the layout usable without horizontal overflow', async ({ page }) => {
@@ -49,10 +49,13 @@ test('200% zoom keeps the layout usable without horizontal overflow', async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   // Primary actions stay reachable at 200%.
   await page.getByRole('button', { name: '打开导航' }).click()
-  await expect(page.getByRole('button', { name: '备份与恢复' })).toBeVisible()
-  await page.getByRole('button', { name: '备份与恢复' }).focus()
+  await expect(page.getByRole('button', { name: '数据', exact: true })).toBeVisible()
+  // 抽屉打开时会把焦点移到当前导航项；等它落定再操作，避免焦点被抢导致 Enter 落空。
+  await expect(page.locator('nav button[aria-current="page"]')).toBeFocused()
+  await page.getByRole('button', { name: '数据', exact: true }).focus()
+  await expect(page.getByRole('button', { name: '数据', exact: true })).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('heading', { name: '备份与恢复', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '数据', level: 1 })).toBeVisible()
   await expect(page.getByRole('button', { name: '创建完整备份' })).toBeVisible()
 })
 
@@ -60,9 +63,10 @@ test('language switch localizes the shell', async ({ page }) => {
   await page.goto('/')
   await connect(page)
   await expect(page.getByRole('heading', { name: '总览', level: 1 })).toBeVisible()
-  await page.getByLabel('语言').selectOption('en')
-  await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Backup & Recovery' })).toBeVisible()
-  await page.getByLabel('Language').selectOption('zh-CN')
-  await expect(page.getByRole('heading', { name: '总览', level: 1 })).toBeVisible()
+  await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.getByLabel('界面语言').selectOption('en')
+  await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Data', exact: true })).toBeVisible()
+  await page.getByLabel('Interface language').selectOption('zh-CN')
+  await expect(page.getByRole('heading', { name: '设置', level: 1 })).toBeVisible()
 })
