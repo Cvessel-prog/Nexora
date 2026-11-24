@@ -1,48 +1,69 @@
 # Project Status
 
-Last verified: 2026-11-18（Asia/Shanghai）
-Code baseline: `main@8862bd5` · Public release: `v1.0.4` · Desktop/ACL/IA hardening present as uncommitted working-tree changes.
+Last verified: 2026-11-24（Asia/Shanghai）
+Code baseline: `main@3cfa973` · Public release: `v1.0.4` · `/api/v1` routes: 104
 
 ## Current phase
 
-NEXORA has completed its principal local-first product loops and is in **Release Hardening**. Memory lifecycle, profile, monthly reflection, Human 3.0/Growth, Security Center, MCP, AI Connections, provider authorization, backup/recovery, private GitHub connection, Windows launcher and installer automation all have real implementations and automated coverage.
+NEXORA has completed its principal local-first product loops and is in **Release Hardening**. Memory lifecycle, profile, monthly reflection, Human 3.0/Growth, Security Center, MCP, AI Connections, provider authorization, import, managed backups, Git history/restore, GitHub Device Flow/private verification, Windows launcher and installer automation all have real implementations and automated coverage.
 
-The 2026-11-18 hardening pass adds three product-level fixes: a real desktop window with WebView2 → Edge `--app` → browser fallback, DACL repair for `binding.key`/runtime/provider state, and a consolidated nine-entry navigation with hub tabs, a Settings page, and a persistent concept map. D1-0 additionally hardens startup: launcher.log without tokens, actionable port-conflict and Vault-validation errors, Windows exclusive port binding, and crash-recovery coverage. See `docs/desktop-experience/D1_0_RUNTIME_STABILIZATION.md`.
+The 2026-11-18 hardening pass is **merged** (PR #58, `fix/desktop-ux-hardening`) and brings:
 
-It is not yet classified as a fully validated stable release. Remaining release gates are real NTFS ACL and multi-user evidence, clean-VM install/upgrade/uninstall/recovery, local Playwright download-root-cause reproduction, a rebuilt installer carrying the windowed-exe startup fix, and a real MCP host compatibility baseline. See `RELEASE_READINESS_CHECKLIST.md`.
+- a native desktop window host (`desktop_shell.py`) using pywebview/WebView2 when available, then Edge `--app`, then the system browser;
+- `core/win_acl.py` repairing damaged DACLs for `binding.key`, `runtime.json`, `providers.json` and `provider-audit.jsonl` without rotating `binding.key`;
+- a consolidated nine-entry navigation with hub tabs, a Settings page, and a persistent concept map;
+- launcher startup hardening: token-free `launcher.log`, actionable port-conflict and Vault-validation errors, Windows exclusive port binding, crash recovery.
+
+Internationalisation is complete across the workspace: `zh-CN` and `English` cover the navigation,
+topbar, concepts, settings, and every page body. Both directions are covered by tests.
 
 ## Capability status
 
-- **Implemented:** Vault create/validate/register/restart-switch, resident external-edit monitoring, memory lifecycle, profile, conversational onboarding, monthly reflection, Human 3.0, Growth, Security Center, AI Connections, provider authorization, import, managed backups, Git history/restore, GitHub Device Flow/private verification, Windows launcher and installer build/smoke automation.
-- **Desktop and recovery hardening (uncommitted):** native window host (`desktop_shell.py`) using pywebview/WebView2 when available, Edge `--app` second, system browser last; relaunch after Vault switch; crash traceback in windowed mode; runtime token kept out of argv; `core/win_acl.py` repairs damaged DACLs without rotating `binding.key` and now covers `runtime.json`, `providers.json` and `provider-audit.jsonl`.
-- **Information architecture (uncommitted):** nine navigation entries; Memory/Reflection/Growth/Data/Connections own hub tabs; Settings page centralizes language, contrast, Vault, backup/provider/GitHub/authorization status; a shared concept map explains Vault, Obsidian, snapshots, GitHub backup, MCP and Provider boundaries from every surface.
+- **Implemented:** Vault create/validate/register/restart-switch, resident external-edit monitoring, memory lifecycle, profile, conversational onboarding, monthly reflection, Human 3.0, Growth, Security Center, AI Connections, provider authorization, import, managed backups, Git history/restore, GitHub Device Flow/private verification, Windows launcher and installer build/smoke automation, native desktop window host, Windows ACL repair, Settings page, concept map, full UI localisation.
 - **Partial or deliberately limited:** Obsidian is an optional file editor rather than a required plugin; MCP currently exposes Tools but not Resources/Prompts; provider support is limited to the implemented adapters; scheduled backup is not implemented.
-- **Release-hardening work:** Windows ACL/multi-user validation, clean-VM installer acceptance, local Playwright environment validation, real MCP client matrix, rebuilt installer verification, and final release documentation.
+- **Release-hardening work:** real NTFS ACL / multi-user evidence, clean-VM installer acceptance, local Playwright environment validation, real MCP client matrix, rebuilt installer verification, and final release documentation.
 
-## Current automated evidence
+## Current automated evidence (2026-11-24)
 
-- Python script suite: all runnable `tests/test_*.py` scripts passed on 2026-11-18, including `test_local_api.py` with the native folder picker boundary mocked (a real Tk modal cannot run under TestClient). `test_release_packaging.py` was not rerun in this pass.
-- Python pytest: `pytest -q` → 28 passed on 2026-11-18, including `tests/test_win_acl.py`, `tests/test_desktop_shell.py` and `tests/test_launcher_runtime.py`. The new files are wired into the Windows CI job.
-- Launcher integration passes first start, duplicate start, Vault switch, graceful shutdown, hard-kill recovery and token-free log checks. Installer contract tests confirm per-user install, lowest privileges, no `[UninstallDelete]`, and no Vault path in the installer.
-- Frontend unit: 29/29 tests passed; TypeScript (`tsc --noEmit`) and production build passed.
-- Lint: exit 0 with one existing unused-variable warning in `apps/web/e2e/accessibility.spec.ts:4`.
-- Ruff, release privacy gate and `pip-audit`: passed during the 2026-11-17 audit; not all were rerun on 2026-11-18.
-- MCP protocol/security, security lifecycle, provider target binding, backup, GitHub and launcher tests passed.
-- GitHub CI after PR closure: smoke, Windows clean, Playwright E2E and Windows installer smoke all passed on the merged changes. The new uncommitted hardening has not yet run in CI.
-- Local Playwright: the earlier Chromium download attempt timed out before tests started. CI success does not close the local download-root-cause task.
-- Clean Windows VM manual installer acceptance and NTFS ACL/multi-user validation: not yet performed. The public v1.0.4 installer still predates the windowed-stdout fix; it has not been rebuilt as v1.0.5.
+- Python script suite: all runnable `tests/test_*.py` scripts pass (30/30), including `test_local_api.py`, `test_windows_acl.py`, `test_desktop_shell.py` and `test_launcher_runtime.py`.
+- Frontend: `tsc --noEmit` passes, **30/30** Vitest tests pass, `npm run build` passes, Ruff passes with one pre-existing unused-variable warning.
+- **Local Playwright E2E still does not run locally.** The Playwright Chromium download does not complete in this environment (the cached browser build does not match the installed Playwright version and the CDN does not resume). CI runs E2E on GitHub-hosted runners; that is the source of truth for E2E.
 
 ## GitHub status
 
-- PRs #47, #48, #52 and #53 were reviewed, rerun where necessary, passed CI and were merged.
-- Dependency PR #43 and provider authorization PR #55 also passed CI and were merged.
-- Open pull requests at this verification point: **0**.
+- Open pull requests: **1** — PR #57 (`fix/windows-private-acl`). It predates PR #58 and **currently conflicts with `main`**; PR #58 already landed `core/win_acl.py` and the desktop shell, so #57 needs a rebase or a decision to close it.
 - `main` is protected and requires pull requests.
+
+## Open release-hardening issues
+
+| Issue | Priority | Topic |
+|---|---|---|
+| #60 | P0 | Consolidate Windows ACL security implementation (blocks #61, #62) |
+| #61 | P0 | Verify Windows multi-user data isolation |
+| #62 | P0 | Complete Windows installer upgrade acceptance |
+| #63 | P1 | Redesign first-run onboarding |
+| #64 | P1 | Improve Overview dashboard |
+| #65 | P2 | Protect unsaved changes in Monthly Reflection |
+| #66 | P2 | Establish MCP host compatibility matrix |
+| #67 | P3 | Implement scheduled backup and recovery |
+
+## Ready-to-submit branches
+
+Both branches below are based on `main@3cfa973` (with `origin/main` merged) and verified locally.
+
+| Branch | Commits | Contents |
+|---|---|---|
+| `docs/api-and-ci-hygiene` | 13 ahead | Full UI localisation (872 keys × 2 languages, 14 pages); `LOCAL_API.md` refreshed to the 104-route inventory; historical planning docs annotated; CI `timeout-minutes` on every job. |
+| `fix/vault-monitor-leak` | 1 ahead | Stop the resident Vault watcher on app shutdown, plus a regression test. |
 
 ## Documentation authority
 
-This file is the current capability-status authority. Historical Phase, planning and acceptance documents preserve their original context; their historical “not implemented” or “complete” statements must not override current code and current evidence. The FastAPI source currently defines 103 `/api/v1` routes, and `LOCAL_API.md` was checked against that inventory during R4.
+This file is the current capability-status authority. Historical Phase, planning and acceptance documents
+preserve their original context; their historical “not implemented” or “complete” statements must not
+override current code and current evidence. The FastAPI source currently defines 104 `/api/v1` routes,
+and `LOCAL_API.md` was checked against that inventory.
 
 ## Workspace note
 
-The 2026-11-18 desktop/ACL/IA hardening is present only in the local working tree; it has not been committed, pushed, released or merged. The Release Hardening planning and R4 documentation closure described earlier changed only project documentation. Their Git publication state is determined by the repository history rather than this status snapshot.
+Two local branches are prepared and verified against `main@3cfa973`; see “Ready-to-submit branches”.
+Nothing is pushed automatically.
