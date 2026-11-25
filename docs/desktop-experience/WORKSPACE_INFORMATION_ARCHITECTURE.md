@@ -51,7 +51,8 @@ Import is an independent primary destination. It is not part of Backup. Settings
 | Existing entry/route | Correct destination | Presentation |
 |---|---|---|
 | `#/overview` | Overview | Primary item |
-| `#/memory-review` | Memory | Default tab |
+| `#/memory-graph` | Memory | Default tab |
+| `#/memory-review` | Memory | Review tab; the only place for candidate decisions |
 | `#/memory-timeline` | Memory | Secondary tab |
 | `#/profile` | Profile | Primary item |
 | `#/monthly-reflection` | Reflection | Default tab |

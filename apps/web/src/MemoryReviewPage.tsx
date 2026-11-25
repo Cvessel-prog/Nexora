@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { CheckCircle, Clock, FileText, Funnel, LockKey, MagnifyingGlass, NotePencil, Tag, UserCircle, XCircle } from '@phosphor-icons/react'
 import type { Memory, MemoryStats } from './api'
 import { EmptyState } from './components/StateBlocks'
+import { formatDate, getLanguage, useT } from './i18n'
 
 type Props = {
   memories: Memory[]
@@ -19,12 +20,8 @@ type Props = {
   onOnboarding: () => void
 }
 
-function displayTime(value: string) {
-  if (!value) return '时间未知'
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-}
-
 export default function MemoryReviewPage(props: Props) {
+  const t = useT()
   const { memories, stats, selected, draft, rejectionReason, loading, saving } = props
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
@@ -40,6 +37,11 @@ export default function MemoryReviewPage(props: Props) {
     )
   }, [memories, query, category, status])
 
+  const displayTime = (raw: string) => {
+    if (!raw) return t('review.timeUnknown')
+    return formatDate(getLanguage(), raw)
+  }
+
   function select(memory: Memory) {
     setEditing(false)
     props.onSelect(memory)
@@ -51,50 +53,50 @@ export default function MemoryReviewPage(props: Props) {
 
   return <section className="review-page">
     <header className="review-heading compact-heading">
-      <div><p className="eyebrow">MEMORY LIFECYCLE / HUMAN REVIEW</p><p>候选记忆必须由你确认后，才会进入个人档案。</p></div>
-      <div className="review-stats" aria-label="真实记忆统计">
-        <article><span>Candidate Memories</span><strong>{stats.candidateMemories}</strong></article>
-        <article><span>Pending Review</span><strong>{stats.pendingReview}</strong></article>
-        <article><span>Confirmed Memories</span><strong>{stats.confirmedMemories}</strong></article>
+      <div><p className="eyebrow">MEMORY LIFECYCLE / HUMAN REVIEW</p><p>{t('review.headingNote')}</p></div>
+      <div className="review-stats" aria-label={t('review.statsLabel')}>
+        <article><span>{t('review.statCandidate')}</span><strong>{stats.candidateMemories}</strong></article>
+        <article><span>{t('review.statPending')}</span><strong>{stats.pendingReview}</strong></article>
+        <article><span>{t('review.statConfirmed')}</span><strong>{stats.confirmedMemories}</strong></article>
       </div>
     </header>
 
     <div className="review-workspace">
-      <aside className="review-filters" aria-label="记忆筛选">
-        <div><p className="eyebrow">FILTERS</p><h3>筛选记忆</h3></div>
-        <label className="search-field"><MagnifyingGlass size={18} /><span className="sr-only">搜索候选记忆</span><input aria-label="搜索候选记忆" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索记忆…" /></label>
-        <label><Funnel size={17} /><span>分类</span><select aria-label="分类筛选" value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">全部分类</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <label><Clock size={17} /><span>状态</span><select aria-label="状态筛选" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">全部待审核状态</option><option value="candidate">Candidate</option><option value="disputed">Disputed</option></select></label>
-        <div className="lifecycle-guide"><strong>Candidate</strong><span>人工判断</span><em>Confirmed / Rejected</em></div>
+      <aside className="review-filters" aria-label={t('review.filtersLabel')}>
+        <div><p className="eyebrow">FILTERS</p><h3>{t('review.filtersTitle')}</h3></div>
+        <label className="search-field"><MagnifyingGlass size={18} /><span className="sr-only">{t('review.search')}</span><input aria-label={t('review.search')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('review.searchPlaceholder')} /></label>
+        <label><Funnel size={17} /><span>{t('review.category')}</span><select aria-label={t('review.categoryLabel')} value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">{t('review.categoryAll')}</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+        <label><Clock size={17} /><span>{t('review.status')}</span><select aria-label={t('review.statusLabel')} value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">{t('review.statusAll')}</option><option value="candidate">Candidate</option><option value="disputed">Disputed</option></select></label>
+        <div className="lifecycle-guide"><strong>{t('review.lifecycleCandidate')}</strong><span>{t('review.lifecycleJudgement')}</span><em>{t('review.lifecycleOutcome')}</em></div>
       </aside>
-      <aside className="candidate-queue" aria-label="候选记忆列表">
-        <div className="queue-heading"><div><p className="eyebrow">CANDIDATE QUEUE</p><h3>等待你的判断</h3></div><span>{filtered.length} / {memories.length}</span></div>
-        {loading && <div className="skeletons" aria-label="加载中"><i /><i /><i /></div>}
-        {!loading && memories.length === 0 && <EmptyState icon={<FileText size={26} />} title="暂时没有候选记忆" description="首次建档完成后，明确提交的回答会在这里等待审核。" action={<button className="primary-action" onClick={props.onOnboarding}>查看个人档案</button>} />}
-        {!loading && memories.length > 0 && filtered.length === 0 && <EmptyState icon={<MagnifyingGlass size={26} />} title="没有匹配结果" description="调整搜索词或筛选条件后重试。" />}
+      <aside className="candidate-queue" aria-label={t('review.queueLabel')}>
+        <div className="queue-heading"><div><p className="eyebrow">CANDIDATE QUEUE</p><h3>{t('review.queueTitle')}</h3></div><span>{filtered.length} / {memories.length}</span></div>
+        {loading && <div className="skeletons" aria-label={t('review.loading')}><i /><i /><i /></div>}
+        {!loading && memories.length === 0 && <EmptyState icon={<FileText size={26} />} title={t('review.emptyTitle')} description={t('review.emptyDetail')} action={<button className="primary-action" onClick={props.onOnboarding}>{t('review.viewProfile')}</button>} />}
+        {!loading && memories.length > 0 && filtered.length === 0 && <EmptyState icon={<MagnifyingGlass size={26} />} title={t('review.noMatchTitle')} description={t('review.noMatchDetail')} />}
         {!loading && filtered.map((memory) => <button key={memory.id} className={`candidate-row ${memory.id === selected?.id ? 'selected' : ''}`} aria-pressed={memory.id === selected?.id} onClick={() => select(memory)}>
-          <span className="candidate-icon"><FileText size={20} /></span><span className="candidate-copy"><small>{memory.type} · {memory.status}</small><strong>{memory.subject || '未命名候选记忆'}</strong><span>{memory.content}</span><em>{memory.sourceAgent} · {displayTime(memory.created)}</em></span>
+          <span className="candidate-icon"><FileText size={20} /></span><span className="candidate-copy"><small>{memory.type} · {memory.status}</small><strong>{memory.subject || t('review.unnamed')}</strong><span>{memory.content}</span><em>{memory.sourceAgent} · {displayTime(memory.created)}</em></span>
         </button>)}
       </aside>
 
       <section className="memory-inspector" aria-live="polite">
-        {!selected && !loading && <EmptyState icon={<FileText size={30} />} title={memories.length ? '选择一条候选记忆' : '等待候选记忆'} description={memories.length ? '在左侧队列中点选一条候选记忆，这里会显示完整内容和生命周期操作。' : '只有你明确提交的内容才会成为候选记忆；系统不会自动写入正式档案。'} action={memories.length === 0 ? <button className="secondary-action" onClick={props.onOnboarding}>查看个人档案</button> : undefined} />}
+        {!selected && !loading && <EmptyState icon={<FileText size={30} />} title={memories.length ? t('review.selectPromptTitle') : t('review.waitingTitle')} description={memories.length ? t('review.selectPromptDetail') : t('review.waitingDetail')} action={memories.length === 0 ? <button className="secondary-action" onClick={props.onOnboarding}>{t('review.viewProfile')}</button> : undefined} />}
         {selected && <>
-          <header className="inspector-heading"><div><p className="eyebrow">MEMORY INSPECTOR / {selected.status.toUpperCase()}</p><h3>{selected.subject || '未命名候选记忆'}</h3></div><span className="lifecycle-badge">Candidate</span></header>
-          <div className="lifecycle-track" aria-label="记忆生命周期"><strong>Candidate</strong><i /><span>Explicit confirmation</span><i /><span>Formal memory</span></div>
+          <header className="inspector-heading"><div><p className="eyebrow">MEMORY INSPECTOR / {selected.status.toUpperCase()}</p><h3>{selected.subject || t('review.unnamed')}</h3></div><span className="lifecycle-badge">{t('review.lifecycleCandidate')}</span></header>
+          <div className="lifecycle-track" aria-label={t('review.lifecycleLabel')}><strong>{t('review.lifecycleCandidate')}</strong><i /><span>{t('review.explicitConfirmation')}</span><i /><span>{t('review.formalMemory')}</span></div>
           <dl className="inspector-meta">
-            <div><UserCircle size={17} /><dt>来源</dt><dd>{selected.sourceAgent}</dd></div>
-            <div><Clock size={17} /><dt>创建时间</dt><dd>{displayTime(selected.created)}</dd></div>
-            <div><Tag size={17} /><dt>分类</dt><dd>{selected.type}</dd></div>
-            <div><LockKey size={17} /><dt>AI 权限</dt><dd>{selected.aiAccess || 'denied'}</dd></div>
-            <div><FileText size={17} /><dt>可见性</dt><dd>{selected.visibility || 'private'}</dd></div>
-            <div><NotePencil size={17} /><dt>Revision</dt><dd><code>{selected.revision.slice(0, 12)}…</code></dd></div>
+            <div><UserCircle size={17} /><dt>{t('review.source')}</dt><dd>{selected.sourceAgent}</dd></div>
+            <div><Clock size={17} /><dt>{t('review.created')}</dt><dd>{displayTime(selected.created)}</dd></div>
+            <div><Tag size={17} /><dt>{t('review.category')}</dt><dd>{selected.type}</dd></div>
+            <div><LockKey size={17} /><dt>{t('review.aiAccess')}</dt><dd>{selected.aiAccess || 'denied'}</dd></div>
+            <div><FileText size={17} /><dt>{t('review.visibility')}</dt><dd>{selected.visibility || 'private'}</dd></div>
+            <div><NotePencil size={17} /><dt>{t('review.revision')}</dt><dd><code>{selected.revision.slice(0, 12)}…</code></dd></div>
           </dl>
-          <section className="memory-content-panel"><div className="content-label"><span>完整内容</span>{selected.tags?.length ? <span>{selected.tags.join(' · ')}</span> : <span>未设置标签</span>}</div>{editing ? <textarea aria-label="记忆内容" value={draft} onChange={(event) => props.onDraft(event.target.value)} maxLength={4000} disabled={saving} /> : <p>{selected.content}</p>}</section>
-          <label className="rejection-field" htmlFor="rejection-reason">拒绝原因（可选）<input id="rejection-reason" value={rejectionReason} onChange={(event) => props.onRejectionReason(event.target.value)} maxLength={200} placeholder="例如：不是长期信息" disabled={saving} /></label>
+          <section className="memory-content-panel"><div className="content-label"><span>{t('review.contentLabel')}</span>{selected.tags?.length ? <span>{selected.tags.join(' · ')}</span> : <span>{t('review.noTags')}</span>}</div>{editing ? <textarea aria-label={t('review.contentArea')} value={draft} onChange={(event) => props.onDraft(event.target.value)} maxLength={4000} disabled={saving} /> : <p>{selected.content}</p>}</section>
+          <label className="rejection-field" htmlFor="rejection-reason">{t('review.rejectionLabel')}<input id="rejection-reason" value={rejectionReason} onChange={(event) => props.onRejectionReason(event.target.value)} maxLength={200} placeholder={t('review.rejectionPlaceholder')} disabled={saving} /></label>
           <footer className="inspector-actions">
-            <p>写操作通过 Core 执行，并校验当前 Revision。</p>
-            <div>{editing ? <><button className="secondary" onClick={() => { props.onDraft(selected.content); setEditing(false) }} disabled={saving}>取消编辑</button><button className="secondary" onClick={() => void save()} disabled={saving || !draft.trim()}>保存修改</button></> : <button className="secondary" onClick={() => setEditing(true)} disabled={saving}><NotePencil size={18} />Edit Memory</button>}<button className="danger" onClick={() => void props.onAct('reject')} disabled={saving}><XCircle size={18} />Reject Memory</button><button className="confirm" onClick={() => void props.onAct('confirm')} disabled={saving}><CheckCircle size={18} />Confirm Memory</button></div>
+            <p>{t('review.writeNote')}</p>
+            <div>{editing ? <><button className="secondary" onClick={() => { props.onDraft(selected.content); setEditing(false) }} disabled={saving}>{t('review.cancelEdit')}</button><button className="secondary" onClick={() => void save()} disabled={saving || !draft.trim()}>{t('review.saveEdit')}</button></> : <button className="secondary" onClick={() => setEditing(true)} disabled={saving}><NotePencil size={18} />{t('review.editMemory')}</button>}<button className="danger" onClick={() => void props.onAct('reject')} disabled={saving}><XCircle size={18} />{t('review.rejectMemory')}</button><button className="confirm" onClick={() => void props.onAct('confirm')} disabled={saving}><CheckCircle size={18} />{t('review.confirmMemory')}</button></div>
           </footer>
         </>}
       </section>

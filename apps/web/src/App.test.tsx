@@ -643,4 +643,11 @@ describe('i18n', () => {
     expect(formatDate('zh-CN', '2026-11-09T10:00:00Z')).toContain('2026')
     expect(formatDate('en', 'not-a-date')).toBe('not-a-date')
   })
+  it('localizes page content, not only the shell', () => {
+    expect(translate('overview.welcome', 'en')).toBe('Welcome back to your space')
+    expect(translate('overview.welcome', 'zh-CN')).toBe('欢迎回到你的个人空间')
+    expect(translate('monthly.heading', 'en')).not.toContain('复盘')
+    expect(translate('backup.heading', 'en')).not.toContain('备份')
+    expect(translate('review.headingNote', 'en')).not.toContain('候选记忆')
+  })
 })

@@ -6,6 +6,7 @@ import argparse
 import re
 import secrets
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -322,6 +323,19 @@ def find(root: Path, folder: str, record_id: str) -> Path:
             raise domain_error(exc) from None
 
 
+@asynccontextmanager
+async def _vault_monitor_lifespan(application: FastAPI):
+    """Stop the resident Vault watcher when the app shuts down.
+
+    The launcher rebuilds the app on every Vault switch, so a watcher that
+    outlives its app would accumulate one polling thread per switch.
+    """
+    yield
+    monitor = getattr(application.state, "vault_monitor", None)
+    if monitor is not None:
+        monitor.stop()
+
+
 def create_app(vault: Path, token: str | None = None, web_dist: Path | None = None, watch: bool = False) -> FastAPI:
     root = vault.expanduser().resolve()
     with vault_operation_lock(root):
@@ -332,7 +346,7 @@ def create_app(vault: Path, token: str | None = None, web_dist: Path | None = No
     assert_vault_isolated(root)
     require_current_schema(root)
 
-    app = FastAPI(title="NEXORA Local API", version="1.0.4")
+    app = FastAPI(title="NEXORA Local API", version="1.0.4", lifespan=_vault_monitor_lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
     app.state.vault = root
     app.state.token = token or secrets.token_urlsafe(32)

@@ -21,7 +21,8 @@ import AIConnectionsPage from './AIConnectionsPage'
 import FirstRunWizard from './FirstRunWizard'
 import { LoadingState } from './components/StateBlocks'
 import relationshipMap from './assets/relationship-map.webp'
-import { localizedError, useLanguage, useT } from './i18n'
+import { LANGUAGES, localizedError, translate, useLanguage, useT } from './i18n'
+import type { Language } from './i18n'
 import './App.css'
 
 // The graph engine is only downloaded when the Memory Graph route is opened.
@@ -79,7 +80,7 @@ function TokenGate({ error, connecting, onConnect }: TokenGateProps) {
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!token.trim()) {
-      setFieldError('请输入本次本地服务显示的启动令牌。')
+      setFieldError(t('gate.emptyToken'))
       return
     }
     setFieldError('')
@@ -196,7 +197,7 @@ function App() {
             && stats.candidateMemories === 0
             && stats.confirmedMemories === 0
             && stats.pendingReview === 0
-          setWizardVaultName(vaultInfo?.displayName && vaultInfo.displayName !== 'vault' ? vaultInfo.displayName : '我的个人空间')
+          setWizardVaultName(vaultInfo?.displayName && vaultInfo.displayName !== 'vault' ? vaultInfo.displayName : t('app.mySpace'))
           setFirstRun(untouched)
         })
       }
@@ -205,7 +206,7 @@ function App() {
     } catch (error) {
       if (controller.signal.aborted || epoch !== sessionEpoch.current) return
       setToken('')
-      setGateError(localizedError(language, error instanceof ApiError && error.status === 401 ? '启动令牌无效，请检查后重新输入。' : messageFor(error)))
+      setGateError(localizedError(language, error instanceof ApiError && error.status === 401 ? t('gate.invalidToken') : messageFor(error)))
     } finally {
       if (epoch === sessionEpoch.current) setConnecting(false)
     }
@@ -336,7 +337,7 @@ function App() {
     } catch (error) {
       if (epoch !== sessionEpoch.current || signal?.aborted) return false
       if (error instanceof ApiError && error.status === 401) {
-        disconnect('会话已失效，请重新连接。')
+        disconnect(t('app.sessionExpired'))
       } else {
         setNotice({ kind: 'error', text: messageFor(error) })
       }
@@ -412,7 +413,7 @@ function App() {
       if (next === 'monthly') setMonthlyTrendView(result as MonthlyTrend)
     } catch (error) {
       if (controller.signal.aborted || epoch !== sessionEpoch.current || request !== viewRequest.current) return
-      if (error instanceof ApiError && error.status === 401) disconnect('会话已失效，请重新连接。')
+      if (error instanceof ApiError && error.status === 401) disconnect(t('app.sessionExpired'))
       else setNotice({ kind: 'error', text: messageFor(error) })
     } finally {
       if (epoch === sessionEpoch.current && request === viewRequest.current) setVisualLoading(null)
@@ -437,19 +438,19 @@ function App() {
     } finally { if (epoch === sessionEpoch.current) setSaving(false) }
   }
 
-  async function createReflection(month: string) { const ok = await monthlyAction((api, signal) => api.createMonthly(month, signal)); if (ok) setNotice({ kind: 'success', text: '本月复盘草稿已创建并保存在本地。' }); return Boolean(ok) }
+  async function createReflection(month: string) { const ok = await monthlyAction((api, signal) => api.createMonthly(month, signal)); if (ok) setNotice({ kind: 'success', text: t('app.reflectionCreated') }); return Boolean(ok) }
   function saveReflectionDimension(dimension: ReflectionDimension, content: string) { return reflectionView ? monthlyAction((api, signal) => api.saveMonthlyDimension(reflectionView.id, dimension, content, reflectionView.revision, signal)) : Promise.resolve(false) }
   function addReflectionEvent(event: Omit<ReflectionEvent, 'id'>) { return reflectionView ? monthlyAction((api, signal) => api.addMonthlyEvent(reflectionView.id, event, reflectionView.revision, signal)) : Promise.resolve(false) }
   function deleteReflectionEvent(eventId: string) { return reflectionView ? monthlyAction((api, signal) => api.deleteMonthlyEvent(reflectionView.id, eventId, reflectionView.revision, signal)) : Promise.resolve(false) }
   function saveReflectionGoals(goals: ReflectionGoal[]) { return reflectionView ? monthlyAction((api, signal) => api.saveMonthlyGoals(reflectionView.id, goals, reflectionView.revision, signal)) : Promise.resolve(false) }
   function generateReflectionSummary() { return reflectionView ? monthlyAction((api, signal) => api.generateMonthlySummary(reflectionView.id, reflectionView.revision, signal)) : Promise.resolve(false) }
   function saveReflectionSummary(summary: string) { return reflectionView ? monthlyAction((api, signal) => api.saveMonthlySummary(reflectionView.id, summary, reflectionView.revision, signal)) : Promise.resolve(false) }
-  async function confirmReflection() { if (!reflectionView || !window.confirm('确认这份月度复盘？确认后会进入历史；后续修改将重新变为草稿。')) return false; const ok = await monthlyAction((api, signal) => api.confirmMonthly(reflectionView.id, reflectionView.revision, signal)); if (ok) setNotice({ kind: 'success', text: '月度复盘已由你确认并进入历史。' }); return Boolean(ok) }
+  async function confirmReflection() { if (!reflectionView || !window.confirm(t('app.confirmReflection'))) return false; const ok = await monthlyAction((api, signal) => api.confirmMonthly(reflectionView.id, reflectionView.revision, signal)); if (ok) setNotice({ kind: 'success', text: t('app.reflectionConfirmed') }); return Boolean(ok) }
 
   async function refreshSecurity() { if (!client) return false; try { const result = await client.securityCenter(sessionAbort.current?.signal); setSecurityView(result); return true } catch (error) { handleMutationError(error); return false } }
-  async function authorizeSecurityClient(name: string, scopes: string[]) { if (!client) return null; setSaving(true); try { const result = await client.authorizeSecurityClient(name, scopes, sessionAbort.current?.signal); setClientCredential(result.credential); setNotice({ kind: 'success', text: '客户端已授权；凭据只显示一次。' }); await refreshSecurity(); return result.client.id } catch (error) { handleMutationError(error); return null } finally { setSaving(false) } }
-  async function updateSecurityScopes(id: string, scopes: string[]) { if (!client) return false; setSaving(true); try { await client.updateSecurityScopes(id, scopes, sessionAbort.current?.signal); setNotice({ kind: 'success', text: '最小权限已更新，后续请求立即使用新权限。' }); await refreshSecurity(); return true } catch (error) { handleMutationError(error); return false } finally { setSaving(false) } }
-  async function revokeSecurityClient(id: string) { if (!client) return false; setSaving(true); try { await client.revokeSecurityClient(id, sessionAbort.current?.signal); setNotice({ kind: 'success', text: '客户端授权已撤销，后续请求将被拒绝。' }); await refreshSecurity(); return true } catch (error) { handleMutationError(error); return false } finally { setSaving(false) } }
+  async function authorizeSecurityClient(name: string, scopes: string[]) { if (!client) return null; setSaving(true); try { const result = await client.authorizeSecurityClient(name, scopes, sessionAbort.current?.signal); setClientCredential(result.credential); setNotice({ kind: 'success', text: t('app.clientAuthorized') }); await refreshSecurity(); return result.client.id } catch (error) { handleMutationError(error); return null } finally { setSaving(false) } }
+  async function updateSecurityScopes(id: string, scopes: string[]) { if (!client) return false; setSaving(true); try { await client.updateSecurityScopes(id, scopes, sessionAbort.current?.signal); setNotice({ kind: 'success', text: t('app.scopesUpdated') }); await refreshSecurity(); return true } catch (error) { handleMutationError(error); return false } finally { setSaving(false) } }
+  async function revokeSecurityClient(id: string) { if (!client) return false; setSaving(true); try { await client.revokeSecurityClient(id, sessionAbort.current?.signal); setNotice({ kind: 'success', text: t('app.clientRevoked') }); await refreshSecurity(); return true } catch (error) { handleMutationError(error); return false } finally { setSaving(false) } }
   async function querySecurityEvents(filters: { clientId: string; eventType: string; result: string; since: string; until: string; page: number; pageSize: number }) { if (!client || !securityView) return false; try { const audit = await client.securityEvents(filters, sessionAbort.current?.signal); setSecurityView({ ...securityView, audit }); return true } catch (error) { handleMutationError(error); return false } }
 
   async function save() {
@@ -461,7 +462,7 @@ function App() {
       const updated = await client.edit(selected.id, draft.trim(), selected.revision, signal)
       if (epoch !== sessionEpoch.current || signal?.aborted) return false
       setMemories((items) => items.map((item) => item.id === updated.id ? updated : item))
-      setNotice({ kind: 'success', text: '修改已保存。' })
+      setNotice({ kind: 'success', text: t('app.changesSaved') })
       await loadCandidates()
       return true
     } catch (error) { if (epoch === sessionEpoch.current && !signal?.aborted) handleMutationError(error); return false } finally { if (epoch === sessionEpoch.current) setSaving(false) }
@@ -469,7 +470,7 @@ function App() {
 
   async function act(action: 'confirm' | 'reject') {
     if (!client || !selected) return false
-    const label = action === 'confirm' ? '确认这条记忆并允许已授权 AI 检索？' : '拒绝这条候选记忆？拒绝记录会保留用于审计。'
+    const label = action === 'confirm' ? t('app.confirmMemory') : t('app.rejectMemory')
     if (!window.confirm(label)) return false
     const epoch = sessionEpoch.current
     const signal = sessionAbort.current?.signal
@@ -477,7 +478,7 @@ function App() {
     try {
       await client.action(selected.id, action, selected.revision, rejectionReason.trim(), signal)
       if (epoch !== sessionEpoch.current || signal?.aborted) return false
-      setNotice({ kind: 'success', text: action === 'confirm' ? '记忆已确认。' : '候选记忆已拒绝。' })
+      setNotice({ kind: 'success', text: t(action === 'confirm' ? 'app.memoryConfirmed' : 'app.memoryRejected') })
       await loadCandidates()
       return true
     } catch (error) { if (epoch === sessionEpoch.current && !signal?.aborted) handleMutationError(error); return false } finally { if (epoch === sessionEpoch.current) setSaving(false) }
@@ -485,16 +486,16 @@ function App() {
 
   function handleMutationError(error: unknown) {
     if (error instanceof ApiError && error.status === 401) {
-      disconnect('会话已失效，请重新连接。')
+      disconnect(t('app.sessionExpired'))
     } else if (error instanceof ApiError && error.status === 409) {
-      setNotice({ kind: 'error', text: '这条记录刚刚被其他入口修改。已保留你的草稿，请刷新后核对再提交。' })
+      setNotice({ kind: 'error', text: t('error.conflict') })
     } else {
       setNotice({ kind: 'error', text: messageFor(error) })
     }
   }
 
   async function shutdown() {
-    if (!client || !window.confirm('关闭本地档案服务？关闭后此页面将停止连接。')) return
+    if (!client || !window.confirm(t('app.confirmShutdown'))) return
     const epoch = sessionEpoch.current
     const signal = sessionAbort.current?.signal
     setSaving(true)
@@ -573,10 +574,10 @@ function App() {
 
     <section ref={stageRef} id="main-content" className={`app-stage ${view === 'overview' ? 'with-status' : ''}`} tabIndex={-1} aria-label={t('a11y.main')}>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{navigationAnnouncement}</div>
-      <header className="topbar"><div><p className="eyebrow">{t('shell.workspace')}</p><h1 ref={titleRef} tabIndex={-1}>{titles[view]}</h1></div><div className="topbar-actions"><span className="service-status"><i />{t('topbar.localService')}</span><button className="icon-button concept-button" aria-label={t('concepts.open')} title={t('concepts.open')} onClick={() => setConceptOpen(true)}><BookOpen size={19} /></button><button className="icon-button" aria-label={t('topbar.refreshCandidates')} title={t('topbar.refreshCandidates')} onClick={() => void loadCandidates()} disabled={loading}><Database size={19} /></button><button className="text-button" onClick={() => disconnect()}>{t('topbar.disconnect')}</button><button className="text-button danger-link" onClick={() => void shutdown()} disabled={saving}>{t('topbar.shutdown')}</button></div></header>
+      <header className="topbar"><div><p className="eyebrow">{t('shell.workspace')}</p><h1 ref={titleRef} tabIndex={-1}>{titles[view]}</h1></div><div className="topbar-actions"><span className="service-status"><i />{t('topbar.localService')}</span><span className="service-status"><i />{t('topbar.vaultReady')}</span><button className="icon-button concept-button" aria-label={t('concepts.open')} title={t('concepts.open')} onClick={() => setConceptOpen(true)}><BookOpen size={19} /></button><button className="text-button" onClick={() => setHighContrast((current) => !current)} aria-pressed={highContrast}>{highContrast ? t('app.contrastStandard') : t('app.contrastHigh')}</button><label className="language-switch"><span className="sr-only">{t('topbar.language')}</span><select aria-label={t('topbar.language')} value={language} onChange={(event) => changeLanguage(event.target.value as Language)}>{LANGUAGES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><button className="icon-button" aria-label={t('topbar.refreshCandidates')} title={t('topbar.refreshCandidates')} onClick={() => void loadCandidates()} disabled={loading}><Database size={19} /></button><button className="text-button" onClick={() => disconnect()}>{t('topbar.disconnect')}</button><button className="text-button danger-link" onClick={() => void shutdown()} disabled={saving}>{t('topbar.shutdown')}</button></div></header>
       <div className="content-shell">
         {externalChange && <div className="external-banner" role="status"><Warning size={20} /><span>{t('external.banner')}</span><button className="text-button" onClick={() => void refreshAfterExternal()}>{t('external.refresh')}</button><button className="text-button" onClick={() => setExternalChange(false)}>{t('external.dismiss')}</button></div>}
-        {notice && <div className={`notice ${notice.kind}`} role="status"><span>{notice.text}</span>{notice.kind === 'error' && <button onClick={() => void loadCandidates()}>刷新数据</button>}</div>}
+        {notice && <div className={`notice ${notice.kind}`} role="status"><span>{notice.text}</span>{notice.kind === 'error' && <button onClick={() => void loadCandidates()}>{t('common.refresh')}</button>}</div>}
 
         {(view === 'graph' || view === 'review' || view === 'timeline') && <>
           <HubTabs label={t('title.memory')} description={t('hub.memory.desc')} tabs={[
@@ -629,49 +630,52 @@ function App() {
       </div>
     </section>
 
-    {view === 'overview' && <aside className="status-panel" aria-label="个人空间状态">
-      <div className="status-panel-head"><p className="eyebrow">PERSONAL SPACE</p><h2>空间状态</h2></div>
+    {view === 'overview' && <aside className="status-panel" aria-label={t('app.spaceStatus')}>
+      <div className="status-panel-head"><p className="eyebrow">PERSONAL SPACE</p><h2>{t('app.spaceStatus')}</h2></div>
       <dl className="status-list">
-        <div><dt>本地服务</dt><dd className="ok">已连接</dd></div>
-        <div><dt>待处理</dt><dd>{memoryStats.pendingReview}</dd></div>
-        <div><dt>确认记忆</dt><dd>{memoryStats.confirmedMemories}</dd></div>
-        <div><dt>候选记忆</dt><dd>{memoryStats.candidateMemories}</dd></div>
+        <div><dt>{t('topbar.localService')}</dt><dd className="ok">{t('app.spaceConnected')}</dd></div>
+        <div><dt>{t('app.pending')}</dt><dd>{memoryStats.pendingReview}</dd></div>
+        <div><dt>{t('app.confirmedMemories')}</dt><dd>{memoryStats.confirmedMemories}</dd></div>
+        <div><dt>{t('app.candidateMemories')}</dt><dd>{memoryStats.candidateMemories}</dd></div>
       </dl>
-      <button className="text-button" onClick={() => void loadCandidates()}>刷新状态</button>
+      <button className="text-button" onClick={() => void loadCandidates()}>{t('app.refreshStatus')}</button>
     </aside>}
     <ConceptGuide open={conceptOpen} onClose={() => setConceptOpen(false)} />
   </main>
 }
 
-function Loading() { return <LoadingState label="正在读取本地档案…" /> }
+function Loading() { const t = useT(); return <LoadingState label={t('app.readingProfile')} /> }
 
 function ProfilePage({ value, loading, relationshipMap, onReview, onTimeline }: { value: ProfileOverview | null; loading: boolean; relationshipMap: string; onReview: () => void; onTimeline: () => void }) {
+  const t = useT()
   if (loading || !value) return <Loading />
-  return <section className="visual-page profile-page"><header className="profile-heading compact-heading"><div><p className="eyebrow">PERSONAL INTELLIGENCE</p><p>档案仅展示已确认且允许访问的真实信息，不会推断关系或补全缺失内容。</p></div><span className="boundary-badge"><ShieldCheck size={18} />确认边界已启用</span></header>
-    {value.protected ? <div className="protected"><LockKey size={20} />此档案标记为 <code>{value.access}</code>，当前视图不会显示受保护内容。</div> : <div className="profile-layout">
-      <section className="profile-library" aria-label="个人档案内容">
-        <div className="profile-summary"><span className="profile-avatar"><UserCircle size={42} weight="duotone" /></span><div><p className="eyebrow">PROFILE SUMMARY</p><h3>你的长期智能档案</h3><p>只显示本地 Profile 中明确保存且当前允许展示的内容。</p></div><button className="secondary-action" onClick={onTimeline}>查看生命周期</button></div>
-        <div className="profile-sections">{value.sections.length === 0 ? <div className="profile-empty"><Sparkle size={24} /><h3>档案还是空的</h3><p>首次建档产生的候选记忆需要由你确认，之后才会进入长期档案。</p><button className="primary-action" onClick={onReview}>前往记忆审核</button></div> : value.sections.map((section) => <article key={section.title}><span className="section-icon"><Sparkle size={20} /></span><div><h3>{section.title}</h3>{section.items.length ? <ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul> : <p className="muted">尚未填写。</p>}</div></article>)}</div>
+  return <section className="visual-page profile-page"><header className="profile-heading compact-heading"><div><p className="eyebrow">PERSONAL INTELLIGENCE</p><p>{t('app.protectedHint')}</p></div><span className="boundary-badge"><ShieldCheck size={18} />{t('app.protectedTitle')}</span></header>
+    {value.protected ? <div className="protected"><LockKey size={20} />{t('app.protectedBody', { level: value.access })}</div> : <div className="profile-layout">
+      <section className="profile-library" aria-label={t('app.profileContent')}>
+        <div className="profile-summary"><span className="profile-avatar"><UserCircle size={42} weight="duotone" /></span><div><p className="eyebrow">PROFILE SUMMARY</p><h3>{t('app.profileSummary')}</h3><p>{t('app.profileSummaryHint')}</p></div><button className="secondary-action" onClick={onTimeline}>{t('app.viewLifecycle')}</button></div>
+        <div className="profile-sections">{value.sections.length === 0 ? <div className="profile-empty"><Sparkle size={24} /><h3>{t('app.profileEmptyTitle')}</h3><p>{t('app.profileEmptyHint')}</p><button className="primary-action" onClick={onReview}>{t('app.goReview')}</button></div> : value.sections.map((section) => <article key={section.title}><span className="section-icon"><Sparkle size={20} /></span><div><h3>{section.title}</h3>{section.items.length ? <ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul> : <p className="muted">{t('app.notFilled')}</p>}</div></article>)}</div>
       </section>
       <aside className={`relationship-panel ${value.hasConfirmedMemories ? '' : 'inactive'}`}>
-        <div><p className="eyebrow">RELATIONSHIP MAP</p><h3>全息关系图谱</h3><p>用于呈现可见的已确认记忆空间，不会自动推断真实关系。</p></div>
+        <div><p className="eyebrow">RELATIONSHIP MAP</p><h3>{t('app.relationshipMap')}</h3><p>{t('app.relationshipHint')}</p></div>
         {/* 图谱是固定的视觉框架，不代表具体的人际关系；没有已确认记忆时整体淡出并给出明确空状态。 */}
-        <img src={relationshipMap} alt="全息关系图谱的视觉框架，当前不代表具体个人数据关系" />
-        <div className="relationship-empty"><Network size={20} /><span>{value.hasConfirmedMemories ? '存在可展示的已确认记忆' : '暂无可展示的已确认记忆'}</span></div>
+        <img src={relationshipMap} alt={t('app.relationshipAlt')} />
+        <div className="relationship-empty"><Network size={20} /><span>{value.hasConfirmedMemories ? t('app.hasConfirmed') : t('app.noConfirmed')}</span></div>
       </aside>
-      <aside className="profile-inspector"><p className="eyebrow">NEXT ACTION</p><h3>{value.sections.length ? '继续完善档案' : '建立第一条长期信息'}</h3><p>{value.sections.length ? '审核新的候选记忆，让档案保持准确。' : '在审核页确认首次建档中愿意长期保留的信息。'}</p><button className="primary-action" onClick={onReview}><Stack size={18} />前往记忆审核</button><hr /><h3>确认优先</h3><p>候选、拒绝和归档记忆不会进入智能视图。</p><hr /><h3>本地优先</h3><p>内容保留在本地 Vault，页面不显示私人路径。</p></aside>
+      <aside className="profile-inspector"><p className="eyebrow">NEXT ACTION</p><h3>{value.sections.length ? t('app.nextAction') : t('app.firstLongTerm')}</h3><p>{value.sections.length ? t('app.nextActionHint') : t('app.firstLongTermHint')}</p><button className="primary-action" onClick={onReview}><Stack size={18} />{t('app.goReview')}</button><hr /><h3>{t('app.confirmFirst')}</h3><p>{t('app.confirmFirstHint')}</p><hr /><h3>{t('app.localFirst')}</h3><p>{t('app.localFirstHint')}</p></aside>
     </div>}
   </section>
 }
 
-const dimensionNames: Record<string, string> = { mind: '心智', body: '身体', spirit: '意义与关系', vocation: '工作与创造' }
+function dimensionNames(t: (key: string) => string): Record<string, string> { return { mind: t('human3.dimension.mind'), body: t('human3.dimension.body'), spirit: t('human3.dimension.spirit'), vocation: t('human3.dimension.vocation') } }
 function Human3Page({ value, loading }: { value: Human3Trend | null; loading: boolean }) {
+  const t = useT()
+  const dimensionNamesCopy = dimensionNames(t)
   if (loading || !value) return <Loading />
   return <section className="visual-page"><header className="compact-heading"><div><p className="eyebrow">HUMAN 3.0 / REFLECTION</p><p className="disclaimer">{value.disclaimer}</p></div></header>
-    {value.points.length === 0 ? <div className="empty-card"><h3>还没有已确认的复盘</h3><p>完成一次对话式复盘并由你确认后，趋势才会显示在这里。</p></div> : <div className="human-points">{value.points.map((point) => <article key={point.date}><h3>{point.date}</h3><div className="score-bars">{value.dimensions.map((key) => <div key={key}><span>{dimensionNames[key] ?? key}</span><progress max="10" value={point.scores[key] ?? 0} /><strong>{point.scores[key] ?? '—'}</strong></div>)}</div><p>{point.summary}</p></article>)}</div>}
+    {value.points.length === 0 ? <div className="empty-card"><h3>{t('human3.emptyTitle')}</h3><p>{t('human3.emptyDetail')}</p></div> : <div className="human-points">{value.points.map((point) => <article key={point.date}><h3>{point.date}</h3><div className="score-bars">{value.dimensions.map((key) => <div key={key}><span>{dimensionNamesCopy[key] ?? key}</span><progress max="10" value={point.scores[key] ?? 0} /><strong>{point.scores[key] ?? '—'}</strong></div>)}</div><p>{point.summary}</p></article>)}</div>}
   </section>
 }
 
-function messageFor(error: unknown) { return error instanceof Error ? error.message : '本地服务暂时不可用，请稍后重试。' }
+function messageFor(error: unknown) { return error instanceof Error ? error.message : translate('app.unavailable') }
 
 export default App
