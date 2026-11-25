@@ -47,7 +47,7 @@ test('managed backup is verified and restored through the guarded guided wizard'
   await expect(page.getByRole('heading', { name: '确认恢复' })).toBeVisible()
   const phrase = await page.locator('.restore-confirm code').innerText()
   await expect(page.getByRole('button', { name: /创建安全备份并恢复/ })).toBeDisabled()
-  await page.getByLabel('恢复确认文字').fill(phrase)
+  await page.getByLabel('输入确认文字').fill(phrase)
   await page.getByRole('button', { name: /创建安全备份并恢复/ }).click()
 
   await expect(page.getByRole('heading', { name: '恢复完成' })).toBeVisible()
