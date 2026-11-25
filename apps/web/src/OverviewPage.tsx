@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Brain, Clock, ShieldCheck, Stack, UserCircle } from '@phosphor-icons/react'
-import type { ApiClient, AuditEvent, OverviewSnapshot, TimelineItem, VaultBackup, VaultStatus } from './api'
+import { ArrowRight, Brain, CheckCircle, Clock, FolderOpen, Laptop, Stack, UserCircle } from '@phosphor-icons/react'
+import type { ApiClient, OverviewSnapshot, TimelineItem, VaultBackup, VaultStatus } from './api'
 import { EmptyState, ErrorState, LoadingState } from './components/StateBlocks'
 import { formatDate, getLanguage, useT } from './i18n'
+import intelligenceOrb from './assets/onboarding-intelligence-orb.webp'
 
 type Props = {
   client: ApiClient
@@ -61,12 +62,6 @@ export default function OverviewPage({ client, onNavigate, onConcepts, refreshKe
 
   const displayTime = (raw: string) => formatDate(getLanguage(), raw) || t('overview.timeUnknown')
 
-  const recentSummary = (events: AuditEvent[]) => {
-    if (events.length === 0) return t('overview.noAiAccess')
-    const latest = events[0]
-    return `${latest.clientId} · ${latest.eventType}`
-  }
-
   const next = useMemo(() => {
     if (!value) return null
     const { overview } = value
@@ -88,9 +83,9 @@ export default function OverviewPage({ client, onNavigate, onConcepts, refreshKe
   if (!value) return <EmptyState title={t('overview.title')} description={t('overview.reading')} />
 
   const { overview, timeline, vault, backups } = value
-  const { profile, memory, clients, recentAccess, growth } = overview
-  const confirmedItems = timeline.filter((item) => item.status === 'confirmed').slice(0, 5)
-  const latestBackup = backups[0]
+  const { profile, memory, clients } = overview
+  const recentItems = timeline.slice(0, 3)
+  const hasRecentlyActiveClient = clients.active.some((client) => client.activity === 'recently_active')
   const sections = profile.sections.filter((section) => section.items.length > 0)
   const spaceName = vault?.displayName && vault.displayName !== 'vault' ? vault.displayName : t('overview.spaceName')
   const accessText = (access: string) => {
@@ -98,61 +93,49 @@ export default function OverviewPage({ client, onNavigate, onConcepts, refreshKe
     return key ? t(`overview.access.${key}`) : access
   }
 
-  return <section className="overview-page" aria-label={t('overview.title')}>
-    <header className="home-welcome">
-      <div>
-        <h1>{t('overview.welcome')}</h1>
-        <p>{t('overview.welcomeDetail')}</p>
-      </div>
-      <div className="welcome-identity"><span className="welcome-identity-icon"><UserCircle size={22} weight="duotone" /></span><div><strong>{spaceName}</strong></div></div>
+  return <section className="overview-page overview-command" aria-label={t('overview.title')}>
+    <header className="overview-hero">
+      <div><p className="eyebrow">{t('overview.heroEyebrow')}</p><h1>{t('overview.heroTitle')}</h1><p>{t('overview.heroDetail')}</p></div>
+      <img src={intelligenceOrb} alt="" aria-hidden="true" />
     </header>
 
-    <section className="home-concepts" aria-label={t('overview.conceptsLabel')}>
-      <div><p className="eyebrow">{t('overview.conceptsEyebrow')}</p><h2>{t('overview.conceptsTitle')}</h2><p>{t('overview.conceptsDetail')}</p></div>
-      <div className="home-concept-tags" aria-hidden="true"><span>{t('overview.conceptVault')}</span><span>{t('overview.conceptObsidian')}</span><span>{t('overview.conceptSnapshots')}</span><span>{t('overview.conceptGitHub')}</span><span>{t('overview.conceptMcp')}</span><span>{t('overview.conceptProvider')}</span></div>
-      <button className="secondary-action" onClick={onConcepts}>{t('overview.openConceptMap')}</button>
-    </section>
-
-    {next && <section className="home-next" aria-label={t('overview.nextLabel')}>
-      <h2>{t('overview.nextTitle')}</h2>
-      <button className="home-next-card" onClick={() => onNavigate(next.view)}>
-        <span className="home-next-icon">{next.icon}</span>
-        <span className="home-next-copy"><strong>{next.label}</strong><em>{next.detail}</em></span>
-        <ArrowRight size={20} />
-      </button>
+    {next && <section className="priority-card" aria-label={t('overview.nextLabel')}>
+      <span className="priority-icon">{next.icon}</span>
+      <div><p>{t('overview.priority')}</p><h2>{next.label}</h2><span>{next.detail}</span></div>
+      <button className="priority-action" onClick={() => onNavigate(next.view)}>{t('overview.startAction')}<ArrowRight size={20} /></button>
     </section>}
 
-    <div className="home-grid">
-      <section className="home-panel home-profile" aria-label={t('overview.profileLabel')}>
-        <header><h2>{t('overview.profileTitle')}</h2><button className="text-button" onClick={() => onNavigate('profile')}>{t('overview.viewProfile')}</button></header>
-        {sections.length === 0
-          ? <EmptyState icon={<UserCircle size={24} />} title={t('overview.profileEmptyTitle')} description={t('overview.profileEmptyDetail', { level: accessText(profile.access) })} action={<button className="primary-action" onClick={() => onNavigate('profile')}>{t('overview.viewProfileAction')}</button>} />
-          : <div className="home-sections">{sections.map((section) => <article key={section.title}><h3>{section.title}</h3><ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul></article>)}</div>}
-      </section>
+    <section className="vault-strip" aria-label={t('overview.vaultLabel')}>
+      <div className="vault-strip-primary"><span className="vault-icon"><FolderOpen size={30} /></span><div><small>{t('overview.currentVault')}</small><strong>{spaceName}</strong></div><em><CheckCircle size={17} />{t('overview.localStored')}</em></div>
+      <div className="vault-boundary"><Laptop size={32} /><div><strong>{t('overview.localControl')}</strong><span>{t('overview.localControlDetail')}</span></div></div>
+    </section>
 
-      <section className="home-panel home-activity" aria-label={t('overview.activityLabel')}>
-        <header><h2>{t('overview.activityTitle')}</h2><button className="text-button" onClick={() => onNavigate('review')}>{t('overview.reviewAction')}</button></header>
-        {confirmedItems.length === 0
+    <div className="overview-dashboard-grid">
+      <section className="overview-surface activity-surface" aria-label={t('overview.activityLabel')}>
+        <header><div><Clock size={25} /><span><h2>{t('overview.activityTitle')}</h2><p>{t('overview.activityDetail')}</p></span></div><button onClick={() => onNavigate('review')}>{t('overview.reviewAction')}<ArrowRight size={17} /></button></header>
+        {recentItems.length === 0
           ? <EmptyState icon={<Clock size={24} />} title={t('overview.noConfirmedTitle')} description={t('overview.noConfirmedDetail', { candidate: memory.candidateMemories, pending: memory.pendingReview })} />
-          : <ul className="home-activity-list">{confirmedItems.map((item) => <li key={item.id}><span className="home-activity-dot" /><div><strong>{item.subject || item.type}</strong><small>{item.type} · {displayTime(item.updated || item.created)}</small></div></li>)}</ul>}
+          : <ol className="overview-timeline">{recentItems.map((item) => <li key={item.id}><span /><div><strong>{item.subject || item.type}</strong><p>{item.type}</p></div><time>{displayTime(item.updated || item.created)}</time></li>)}</ol>}
       </section>
 
-      <section className="home-panel home-connections" aria-label={t('overview.clientsLabel')}>
-        <header><h2>{t('overview.clientsTitle')}</h2><button className="text-button" onClick={() => onNavigate('connections')}>{t('overview.manageConnections')}</button></header>
-        {clients.total === 0
-          ? <EmptyState icon={<ShieldCheck size={24} />} title={t('overview.noClientsTitle')} description={t('overview.noClientsDetail') + (recentSummary(recentAccess) === t('overview.noAiAccess') ? '' : ' ' + t('overview.recentAccess', { summary: recentSummary(recentAccess) }))} action={<button className="primary-action" onClick={() => onNavigate('connections')}>{t('overview.viewConnections')}</button>} />
-          : <ul className="home-client-list">{clients.active.map((client) => <li key={client.id}><ShieldCheck size={17} /><div><strong>{client.name}</strong><small>{t('overview.scopesAndActivity', { count: client.scopes.length, activity: client.activity === 'recently_active' ? t('overview.recentlyActive') : t('overview.notConnected') })}</small></div></li>)}</ul>}
-      </section>
+      <div className="overview-side-stack">
+        <section className="overview-surface profile-surface" aria-label={t('overview.profileLabel')}>
+          <header><div><UserCircle size={27} /><h2>{t('overview.profile')}</h2></div><button onClick={() => onNavigate('profile')}>{t('overview.enterProfile')}<ArrowRight size={17} /></button></header>
+          <div className="profile-state"><i />{sections.length ? t('overview.profileActive') : t('overview.profileStarting')}</div>
+          <p>{sections.length ? t('overview.profileProgress', { count: sections.length }) : t('overview.profileEmptyDetail', { level: accessText(profile.access) })}</p>
+        </section>
 
-      <section className="home-panel home-vault" aria-label={t('overview.vaultLabel')}>
-        <header><h2>{t('overview.vaultTitle')}</h2><button className="text-button" onClick={() => onNavigate('backup')}>{t('overview.manageData')}</button></header>
-        <dl className="home-vault-list">
-          <div><dt>{t('overview.backupCount')}</dt><dd>{backups.length}</dd></div>
-          <div><dt>{t('overview.latestBackup')}</dt><dd>{latestBackup ? displayTime(latestBackup.created) : t('overview.noBackup')}</dd></div>
-          <div><dt>{t('overview.externalChangeLabel')}</dt><dd className={vault?.externalChange ? 'warn' : 'ok'}>{vault?.externalChange ? t('overview.externalDetected') : t('overview.externalNone')}</dd></div>
-        </dl>
-        {growth.latestMonth && <p className="home-growth">{t('overview.latestReflection', { month: growth.latestMonth.month })}</p>}
-      </section>
+        <section className="overview-surface health-surface" aria-label={t('overview.systemHealth')}>
+          <header><div><Laptop size={27} /><span><h2>{t('overview.systemHealth')}</h2><p>{t('overview.systemHealthDetail')}</p></span></div></header>
+          <ul>
+            <li className="ok"><CheckCircle />{t('overview.localService')}</li>
+            <li className={vault === null ? 'muted' : vault.externalChange ? 'warn' : 'ok'}>{vault === null ? <Clock /> : <CheckCircle />}{vault === null ? t('overview.vaultUnknown') : t('overview.vaultAccess')}</li>
+            <li className={hasRecentlyActiveClient ? 'ok' : 'muted'}><CheckCircle />{hasRecentlyActiveClient ? t('overview.aiConnected') : t('overview.aiNotConnected')}</li>
+            <li className={backups.length ? 'ok' : 'muted'}><CheckCircle />{backups.length ? t('overview.backupReady') : t('overview.backupNeeded')}</li>
+          </ul>
+        </section>
+      </div>
     </div>
+    <button className="overview-concept-link" onClick={onConcepts}>{t('overview.openConceptMap')}</button>
   </section>
 }

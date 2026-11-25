@@ -8,8 +8,7 @@ async function connect(page: import('@playwright/test').Page) {
   await page.goto('/#/overview')
   await page.getByLabel('本地启动令牌').fill('e2e-token')
   await page.getByRole('button', { name: '连接审核空间' }).click()
-  await expect(page.getByRole('heading', { name: '总览', level: 1 })).toBeVisible()
-  await expect(page.getByText('欢迎回到你的个人空间')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '你的本地优先个人智能空间', level: 1 })).toBeVisible()
 }
 
 test.beforeAll(() => mkdirSync(shots, { recursive: true }))
