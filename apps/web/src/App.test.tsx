@@ -158,7 +158,7 @@ describe('review workspace', () => {
     window.history.replaceState(null, '', '/#token=launcher-token')
 
     render(<App />)
-    await screen.findByText('欢迎回到你的个人空间')
+    await screen.findByText('你的本地优先个人智能空间')
     expect(window.location.hash).toBe('#/overview')
     fireEvent.click(screen.getByRole('button', { name: '关闭服务' }))
     await screen.findByRole('heading', { name: '本地服务已关闭' })
@@ -246,13 +246,13 @@ describe('review workspace', () => {
     render(<App />)
     await connect()
     fireEvent.click(screen.getByRole('button', { name: '概览' }))
-    await screen.findByText('欢迎回到你的个人空间')
-    // 首页回答四个问题：档案状态、新记忆、最值得处理的事、已授权 AI。
-    expect(screen.getByText('已确认的个人信息')).toBeInTheDocument()
+    await screen.findByText('你的本地优先个人智能空间')
+    // 首页回答四个问题：当前 Vault、最近记忆、最值得处理的事、真实系统状态。
+    expect(screen.getByText('当前 Vault')).toBeInTheDocument()
     expect(screen.getByText('最近的记忆变化')).toBeInTheDocument()
-    expect(screen.getByText('已授权的 AI 工具')).toBeInTheDocument()
-    expect(screen.getByText('本地文件与备份')).toBeInTheDocument()
-    expect(screen.getAllByText('查看个人档案').length).toBeGreaterThan(0)
+    expect(screen.getByText('系统状态')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '个人档案' })).toBeInTheDocument()
+    expect(screen.getByText('进入档案')).toBeInTheDocument()
   })
 
   it('renders an honest empty profile without inventing relationships', async () => {

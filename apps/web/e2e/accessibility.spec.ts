@@ -4,14 +4,14 @@ import AxeBuilder from '@axe-core/playwright'
 async function connect(page: import('@playwright/test').Page) {
   await page.getByLabel('本地启动令牌').fill('e2e-token')
   await page.getByRole('button', { name: '连接审核空间' }).click()
-  await expect(page.getByRole('heading', { name: '总览', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '你的本地优先个人智能空间', level: 1 })).toBeVisible()
 }
 
 test('automated axe scan reports no critical or serious violations', async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
   await connect(page)
-  await expect(page.getByRole('heading', { name: '总览', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '你的本地优先个人智能空间', level: 1 })).toBeVisible()
   const results = await new AxeBuilder({ page }).analyze()
   const blocking = results.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious')
   expect(blocking).toEqual([])
@@ -60,7 +60,7 @@ test('200% zoom keeps the layout usable without horizontal overflow', async ({ p
 test('language switch localizes the shell', async ({ page }) => {
   await page.goto('/')
   await connect(page)
-  await expect(page.getByRole('heading', { name: '总览', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '你的本地优先个人智能空间', level: 1 })).toBeVisible()
   await page.getByRole('button', { name: '设置', exact: true }).click()
   await page.getByLabel('界面语言').selectOption('en')
   await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible()
