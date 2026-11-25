@@ -15,7 +15,7 @@ test('Security Center authorizes, changes and revokes a real local client', asyn
   await page.goto('/')
   await page.getByLabel('本地启动令牌').fill('e2e-token')
   await page.getByRole('button', { name: '连接审核空间' }).click()
-  await page.getByRole('button', { name: '隐私审计' }).click()
+  await page.getByRole('button', { name: '隐私与审计' }).click()
   await expect(page.getByRole('heading', { name: 'Security Center' })).toBeVisible()
 
   await page.getByLabel('客户端名称').fill('Synthetic E2E Client')

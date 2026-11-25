@@ -25,9 +25,8 @@ from typing import Any
 
 from filelock import FileLock
 
-from . import profile
+from . import profile, win_acl
 from .vault_identity import app_data_root
-from .windows_security import protect_private_path
 
 REGISTRY_FILE = "providers.json"
 AUDIT_FILE = "provider-audit.jsonl"
@@ -79,9 +78,11 @@ def list_providers() -> list[dict[str, Any]]:
 def _save_providers(items: list[dict[str, Any]]) -> None:
     path = _registry_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps({"providers": items}, ensure_ascii=False, indent=2).encode("utf-8")
     with FileLock(str(path) + ".lock", timeout=10):
-        path.write_text(json.dumps({"providers": items}, ensure_ascii=False, indent=2), encoding="utf-8")
-    protect_private_path(path)
+        # A previous damaged DACL must not make the provider registry silently
+        # read-only; repair it before replacing the file, never rotate contents.
+        win_acl.write_private_file(path, payload)
 
 
 def authorize_provider(provider: str, scopes: list[str]) -> dict[str, Any]:
@@ -233,7 +234,9 @@ def verify_audit() -> dict[str, Any]:
         return {"status": "missing", "events": 0, "lastHash": ""}
     previous = ""
     count = 0
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    # Provider audit is a private app-data file; use the repair-aware reader so a
+    # damaged DACL does not make every provider decision fail.
+    for number, line in enumerate(win_acl.read_private_bytes(path).decode("utf-8").splitlines(), start=1):
         try:
             record = json.loads(line)
         except json.JSONDecodeError:
@@ -269,11 +272,12 @@ def _append_audit(entry: dict[str, Any]) -> dict[str, Any]:
             "prevHash": integrity["lastHash"],
         }
         record["hash"] = _canonical_hash(record)
+        win_acl.ensure_private_file(path, b"")
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
-        protect_private_path(path)
+        win_acl.secure_private_file(path)
     return record
 
 
@@ -282,7 +286,7 @@ def audit_log() -> dict[str, Any]:
     if not path.is_file():
         return {"integrity": verify_audit(), "items": []}
     items: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in win_acl.read_private_bytes(path).decode("utf-8").splitlines():
         try:
             items.append(json.loads(line))
         except json.JSONDecodeError:

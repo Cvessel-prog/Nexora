@@ -9,7 +9,7 @@ async function connect(page: import('@playwright/test').Page) {
   await page.goto('/')
   await page.getByLabel('本地启动令牌').fill('e2e-token')
   await page.getByRole('button', { name: '连接审核空间' }).click()
-  await page.getByRole('button', { name: '月度复盘' }).click()
+  await page.getByRole('button', { name: '复盘', exact: true }).click()
 }
 
 test('Monthly Reflection persists dimensions, events, goals, summary and confirmation', async ({ page }) => {
@@ -20,7 +20,7 @@ test('Monthly Reflection persists dimensions, events, goals, summary and confirm
   page.on('dialog', (dialog) => dialog.accept())
   await page.setViewportSize({ width: 1440, height: 1024 })
   await connect(page)
-  await expect(page.getByRole('heading', { name: '月度复盘', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '复盘', level: 1 })).toBeVisible()
   const create = page.getByRole('button', { name: /创建 \d{4}-\d{2} 复盘/ }).first()
   // 等待归档栏的创建入口渲染完成再点击。数据加载前元素不存在，用 isVisible 猜测会直接跳过点击；
   // 若本月复盘已存在（重复运行共享 Vault），该入口不会出现，此时直接进入已有复盘。
