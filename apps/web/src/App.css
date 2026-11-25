@@ -432,6 +432,7 @@ html.high-contrast .topbar,html.high-contrast .sidebar{border-color:rgba(255,255
 /* Overview command center — faithful to the approved local-first workspace direction. */
 .app-stage.with-status{margin-right:0;background:radial-gradient(circle at 74% 10%,rgba(86,47,190,.14),transparent 31%),#070d19}
 .app-stage.with-status>.topbar{position:absolute;width:1px;height:1px;min-height:0;padding:0;overflow:hidden;clip-path:inset(50%);border:0}
+.app-stage.with-status>.topbar:focus-within{position:relative;width:auto;height:auto;min-height:88px;padding-inline:var(--space-page-x);overflow:visible;clip-path:none;border-bottom:1px solid var(--border)}
 .app-stage.with-status~.status-panel{display:none}
 .app-stage.with-status .content-shell{width:100%;max-width:none;padding:38px clamp(28px,4vw,62px) 64px}
 .overview-command{gap:26px;max-width:1240px;margin:0 auto}

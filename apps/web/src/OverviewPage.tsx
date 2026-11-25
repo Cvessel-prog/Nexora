@@ -85,6 +85,7 @@ export default function OverviewPage({ client, onNavigate, onConcepts, refreshKe
   const { overview, timeline, vault, backups } = value
   const { profile, memory, clients } = overview
   const recentItems = timeline.slice(0, 3)
+  const hasRecentlyActiveClient = clients.active.some((client) => client.activity === 'recently_active')
   const sections = profile.sections.filter((section) => section.items.length > 0)
   const spaceName = vault?.displayName && vault.displayName !== 'vault' ? vault.displayName : t('overview.spaceName')
   const accessText = (access: string) => {
@@ -111,7 +112,7 @@ export default function OverviewPage({ client, onNavigate, onConcepts, refreshKe
 
     <div className="overview-dashboard-grid">
       <section className="overview-surface activity-surface" aria-label={t('overview.activityLabel')}>
-        <header><div><Clock size={25} /><span><h2>{t('overview.activityTitle')}</h2><p>{t('overview.activityDetail')}</p></span></div><button onClick={() => onNavigate('review')}>{t('overview.allMemories')}<ArrowRight size={17} /></button></header>
+        <header><div><Clock size={25} /><span><h2>{t('overview.activityTitle')}</h2><p>{t('overview.activityDetail')}</p></span></div><button onClick={() => onNavigate('review')}>{t('overview.reviewAction')}<ArrowRight size={17} /></button></header>
         {recentItems.length === 0
           ? <EmptyState icon={<Clock size={24} />} title={t('overview.noConfirmedTitle')} description={t('overview.noConfirmedDetail', { candidate: memory.candidateMemories, pending: memory.pendingReview })} />
           : <ol className="overview-timeline">{recentItems.map((item) => <li key={item.id}><span /><div><strong>{item.subject || item.type}</strong><p>{item.type}</p></div><time>{displayTime(item.updated || item.created)}</time></li>)}</ol>}
@@ -128,8 +129,8 @@ export default function OverviewPage({ client, onNavigate, onConcepts, refreshKe
           <header><div><Laptop size={27} /><span><h2>{t('overview.systemHealth')}</h2><p>{t('overview.systemHealthDetail')}</p></span></div></header>
           <ul>
             <li className="ok"><CheckCircle />{t('overview.localService')}</li>
-            <li className={vault?.externalChange ? 'warn' : 'ok'}><CheckCircle />{t('overview.vaultAccess')}</li>
-            <li className={clients.total ? 'ok' : 'muted'}><CheckCircle />{clients.total ? t('overview.aiConnected') : t('overview.aiNotConnected')}</li>
+            <li className={vault === null ? 'muted' : vault.externalChange ? 'warn' : 'ok'}>{vault === null ? <Clock /> : <CheckCircle />}{vault === null ? t('overview.vaultUnknown') : t('overview.vaultAccess')}</li>
+            <li className={hasRecentlyActiveClient ? 'ok' : 'muted'}><CheckCircle />{hasRecentlyActiveClient ? t('overview.aiConnected') : t('overview.aiNotConnected')}</li>
             <li className={backups.length ? 'ok' : 'muted'}><CheckCircle />{backups.length ? t('overview.backupReady') : t('overview.backupNeeded')}</li>
           </ul>
         </section>
