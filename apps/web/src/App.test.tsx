@@ -170,7 +170,8 @@ describe('review workspace', () => {
       '/api/v1/memories': [memory],
       '/api/v1/memory-stats': stats,
       '/api/v1/visualization/profile': { access: 'allowed', protected: false, sections: [{ title: 'Stable preferences', items: ['先给结论'] }] },
-      '/api/v1/visualization/timeline': [{ ...memory, access: 'summary-only', previewAvailable: true, preview: '回答先给结论。' }],
+      '/api/v1/visualization/memory-graph': { nodes: [{ id: memory.id, kind: 'memory', label: memory.subject, status: memory.status, reviewable: true }], edges: [], total: 1, truncated: false, relationshipBasis: 'explicit-tags-only' },
+      '/api/v1/visualization/memory-events': { items: [{ eventId: 'e1', memoryId: memory.id, timestamp: memory.updated, eventType: 'memory.candidate_created', result: 'allowed', origin: 'audit', subject: memory.subject, status: memory.status, type: memory.type, sourceAgent: memory.sourceAgent }], total: 1, integrity: { status: 'verified', events: 1 } },
       '/api/v1/security/overview': securityOverview,
       '/api/v1/security/clients': [],
       '/api/v1/security/audit-events': emptyAudit,
@@ -183,11 +184,10 @@ describe('review workspace', () => {
     expect(screen.getByText('确认边界已启用')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /全息关系图谱的视觉框架/ })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '记忆' }))
+    await waitFor(() => expect(document.querySelector('.relationship-proof')).toHaveTextContent('明确 tags 关系'))
     fireEvent.click(screen.getByRole('button', { name: '记忆时间线' }))
-    await screen.findByRole('button', { name: '查看确认摘要' })
-    expect(screen.queryByText('回答先给结论。')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '查看确认摘要' }))
-    expect(screen.getByText('回答先给结论。')).toBeInTheDocument()
+    await screen.findByRole('heading', { name: '你的记忆如何演变' })
+    await waitFor(() => expect(calls).toContain('/api/v1/visualization/memory-events'))
     fireEvent.click(screen.getByRole('button', { name: '隐私与审计' }))
     await screen.findByRole('heading', { name: 'Security Center' })
     expect(screen.getAllByText('尚无审计记录').length).toBeGreaterThan(0)
@@ -197,7 +197,7 @@ describe('review workspace', () => {
     // 断言实际访问过的端点，而不是请求总数——请求数依赖 useEffect 的时序顺序。
     expect(calls).toEqual(expect.arrayContaining([
       '/api/v1/visualization/profile',
-      '/api/v1/visualization/timeline',
+      '/api/v1/visualization/memory-events',
       '/api/v1/security/overview',
       '/api/v1/visualization/human3',
     ]))
@@ -400,7 +400,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
-    fireEvent.click(screen.getByRole('button', { name: '数据' }))
+    fireEvent.click(screen.getByRole('button', { name: '备份' }))
     fireEvent.click(screen.getByRole('button', { name: 'GitHub 备份' }))
     await screen.findByText('当前状态')
     expect(screen.getByText(/不保存 token/)).toBeInTheDocument()
@@ -416,7 +416,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
-    fireEvent.click(screen.getByRole('button', { name: '连接' }))
+    fireEvent.click(screen.getByRole('button', { name: 'AI 连接' }))
     fireEvent.click(screen.getByRole('button', { name: 'AI Provider' }))
     await screen.findByText('已授权 Provider')
     expect(screen.getByText(/还没有授权任何 Provider/)).toBeInTheDocument()
@@ -452,7 +452,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
-    fireEvent.click(screen.getByRole('button', { name: '数据' }))
+    fireEvent.click(screen.getByRole('button', { name: '备份' }))
     fireEvent.click(screen.getByRole('button', { name: '导入' }))
     fireEvent.change(screen.getByLabelText('导入内容'), { target: { value: '---\ntype: preference\n---\n回答先给结论。' } })
     fireEvent.click(screen.getByRole('button', { name: '预览' }))
@@ -476,7 +476,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
-    fireEvent.click(screen.getByRole('button', { name: '数据' }))
+    fireEvent.click(screen.getByRole('button', { name: '备份' }))
     fireEvent.click(screen.getByRole('button', { name: '备份与恢复' }))
     await screen.findByRole('heading', { name: '版本历史' })
     expect(screen.getByText('chore: update')).toBeInTheDocument()
@@ -496,7 +496,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
-    fireEvent.click(screen.getByRole('button', { name: '数据' }))
+    fireEvent.click(screen.getByRole('button', { name: '备份' }))
     fireEvent.click(screen.getByRole('button', { name: '备份与恢复' }))
     await screen.findByRole('button', { name: '预览变更' })
     fireEvent.click(screen.getByRole('button', { name: '预览变更' }))
@@ -541,7 +541,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
-    fireEvent.click(screen.getByRole('button', { name: '数据' }))
+    fireEvent.click(screen.getByRole('button', { name: '备份' }))
     fireEvent.click(screen.getByRole('button', { name: '备份与恢复' }))
     await screen.findByRole('button', { name: '恢复到此提交' })
     fireEvent.click(screen.getByRole('button', { name: '恢复到此提交' }))
@@ -601,7 +601,7 @@ describe('review workspace', () => {
     })
     render(<App />)
     await connect()
-    fireEvent.click(screen.getByRole('button', { name: '连接' }))
+    fireEvent.click(screen.getByRole('button', { name: 'AI 连接' }))
     fireEvent.click(screen.getByRole('button', { name: 'AI Provider' }))
     await screen.findByText('连接器')
     fireEvent.change(screen.getByLabelText('连接器 Base URL'), { target: { value: 'http://127.0.0.1:8080/v1' } })
@@ -632,6 +632,10 @@ describe('i18n', () => {
   it('translates keys and falls back to the key itself', () => {
     expect(translate('nav.overview', 'en')).toBe('Overview')
     expect(translate('nav.overview', 'zh-CN')).toBe('概览')
+    expect(translate('memory.graph.search', 'en')).toBe('Search memories or topics')
+    expect(translate('memory.graph.search', 'zh-CN')).toBe('搜索记忆或主题')
+    expect(translate('memory.timeline.title', 'en')).toBe('How your memory evolved')
+    expect(translate('memory.timeline.title', 'zh-CN')).toBe('你的记忆如何演变')
     expect(translate('missing.key', 'en')).toBe('missing.key')
   })
   it('formats dates per locale', () => {

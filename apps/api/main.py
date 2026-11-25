@@ -24,7 +24,7 @@ from core.onboarding import onboarding_state, propose_answer
 from core.repository import list_markdown
 from core.vault_identity import VaultMonitor, find_registered, list_registered, register_vault
 from core.vault_management import assert_vault_isolated, recover_vault_swap, require_current_schema, vault_operation_lock
-from core.visualization import human3_trend, monthly_trend, privacy_audit, profile_overview, timeline
+from core.visualization import human3_trend, memory_events, memory_graph, monthly_trend, privacy_audit, profile_overview, timeline
 
 
 class ApiError(Exception):
@@ -583,6 +583,19 @@ def create_app(vault: Path, token: str | None = None, web_dist: Path | None = No
     def visualization_timeline(limit: int = 100) -> dict[str, Any]:
         with profile.vault_lock(root):
             return envelope(timeline(root, max(1, min(limit, 100))))
+
+    @app.get("/api/v1/visualization/memory-graph", dependencies=[auth])
+    def visualization_memory_graph(statuses: str = "confirmed,candidate", limit: int = 200) -> dict[str, Any]:
+        selected = {item.strip() for item in statuses.split(",") if item.strip()}
+        if not selected or not selected <= {"candidate", "confirmed"}:
+            raise ApiError(400, "INVALID_STATUS", "图谱仅支持 candidate 与 confirmed 状态。")
+        with profile.vault_lock(root):
+            return envelope(memory_graph(root, selected, max(1, min(limit, 200))))
+
+    @app.get("/api/v1/visualization/memory-events", dependencies=[auth])
+    def visualization_memory_events(limit: int = 100) -> dict[str, Any]:
+        with profile.vault_lock(root):
+            return envelope(memory_events(root, max(1, min(limit, 100))))
 
     @app.get("/api/v1/visualization/privacy", dependencies=[auth])
     def visualization_privacy() -> dict[str, Any]:

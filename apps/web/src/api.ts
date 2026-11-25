@@ -16,6 +16,11 @@ export type Memory = {
 }
 
 export type MemoryStats = { candidateMemories: number; pendingReview: number; confirmedMemories: number }
+export type MemoryGraphNode = { id: string; kind: 'memory' | 'topic'; label: string; status?: string; type?: string; sourceAgent?: string; created?: string; updated?: string; tags?: string[]; preview?: string; reviewable?: boolean; memberCount?: number }
+export type MemoryGraphEdge = { id: string; source: string; target: string; kind: 'explicit-tag'; evidence: { field: 'tags'; value: string } }
+export type MemoryGraph = { nodes: MemoryGraphNode[]; edges: MemoryGraphEdge[]; total: number; truncated: boolean; relationshipBasis: string }
+export type MemoryEvent = { eventId: string; memoryId: string; timestamp: string; eventType: string; result: string; origin: 'audit' | 'record'; subject: string; status: string; type: string; sourceAgent: string }
+export type MemoryEvents = { items: MemoryEvent[]; total: number; integrity: { status: string; events: number; line?: number } }
 
 export type ProfileOverview = { access: string; protected: boolean; visibility?: string; hasConfirmedMemories?: boolean; sections: { title: string; items: string[] }[] }
 export type TimelineItem = Omit<Memory, 'content' | 'revision'> & { access: string; previewAvailable: boolean; preview: string }
@@ -119,6 +124,9 @@ export class ApiClient {
     }
     return (data as Envelope<T>).data
   }
+
+  memoryGraph(signal?: AbortSignal) { return this.request<MemoryGraph>('/api/v1/visualization/memory-graph', { signal }) }
+  memoryEvents(signal?: AbortSignal) { return this.request<MemoryEvents>('/api/v1/visualization/memory-events', { signal }) }
 
   listCandidates(signal?: AbortSignal) { return this.request<Memory[]>('/api/v1/memories?status=candidate', { signal }) }
   memoryStats(signal?: AbortSignal) { return this.request<MemoryStats>('/api/v1/memory-stats', { signal }) }

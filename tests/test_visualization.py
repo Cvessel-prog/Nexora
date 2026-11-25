@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from apps.api import create_app
 from core import monthly_reflection, profile
-from core.visualization import human3_trend, monthly_trend, privacy_audit, profile_overview, timeline
+from core.visualization import human3_trend, memory_events, memory_graph, monthly_trend, privacy_audit, profile_overview, timeline
 
 
 def write_memory(root: Path, folder: str, name: str, *, status: str, access: str, summary: str) -> None:
@@ -31,6 +31,8 @@ def main():
         write_memory(root, "Confirmed", "allowed", status="confirmed", access="summary-only", summary="可见摘要")
         write_memory(root, "Confirmed", "private", status="confirmed", access="local-only", summary="不可见摘要")
         write_memory(root, "Inbox", "candidate", status="candidate", access="allowed", summary="未确认摘要")
+        allowed_path = root / "30 Memory" / "Confirmed" / "allowed.md"
+        allowed_path.write_text(allowed_path.read_text(encoding="utf-8").replace("source_agent: synthetic-test", "source_agent: synthetic-test\ntags: ['design']"), encoding="utf-8")
 
         rows = timeline(root)
         assert next(row for row in rows if row["subject"] == "allowed")["preview"] == "可见摘要"
@@ -48,6 +50,16 @@ def main():
         forged_view = next(row for row in timeline(root) if row["id"] == "mem-20261102-forged")
         assert not forged_view["previewAvailable"] and not forged_view["subject"]
         assert "伪造确认摘要" not in str(forged_view) and "sensitive-agent" not in str(forged_view) and "敏感类型字段" not in str(forged_view)
+
+        graph = memory_graph(root)
+        allowed_node = next(node for node in graph["nodes"] if node["id"] == "mem-20261102-allowed")
+        topic = next(node for node in graph["nodes"] if node["kind"] == "topic")
+        assert allowed_node["tags"] == ["design"] and topic["label"] == "design"
+        assert graph["edges"] == [{"id": graph["edges"][0]["id"], "source": "mem-20261102-allowed", "target": topic["id"], "kind": "explicit-tag", "evidence": {"field": "tags", "value": "design"}}]
+        events = memory_events(root)
+        assert events["total"] >= 4 and all(item["origin"] in {"audit", "record"} for item in events["items"])
+        assert all(item["eventId"] and "memoryId" in item for item in events["items"])
+        assert all("id" not in item and "recordId" not in item for item in events["items"])
 
         audit = privacy_audit(root)
         assert audit["totalMemories"] == 4 and audit["byAccess"]["local-only"] == 1
@@ -96,6 +108,9 @@ def main():
         headers = {"Authorization": "Bearer visual-token"}
         assert client.get("/api/v1/visualization/profile").status_code == 401
         for endpoint in ("profile", "timeline", "privacy", "human3", "monthly"):
+            response = client.get(f"/api/v1/visualization/{endpoint}", headers=headers)
+            assert response.status_code == 200 and "data" in response.json()
+        for endpoint in ("memory-graph", "memory-events"):
             response = client.get(f"/api/v1/visualization/{endpoint}", headers=headers)
             assert response.status_code == 200 and "data" in response.json()
 
