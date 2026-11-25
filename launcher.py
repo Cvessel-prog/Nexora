@@ -29,6 +29,7 @@ from filelock import FileLock, Timeout
 import desktop_shell
 from apps.api import create_app
 from core import win_acl
+from core.windows_security import ensure_private_directory
 
 ROOT = Path(__file__).parent
 HOST = "127.0.0.1"
@@ -298,7 +299,7 @@ def relaunch(vault: Path, runtime_dir: Path, args: argparse.Namespace) -> None:
 
 def launch(args: argparse.Namespace) -> int:
     state_dir = runtime_directory(args.runtime_dir)
-    state_dir.mkdir(parents=True, exist_ok=True)
+    ensure_private_directory(state_dir)
     configure_logging(state_dir)
     runtime_file = state_dir / "runtime.json"
     lock_file = state_dir / "launcher.lock"
@@ -306,7 +307,7 @@ def launch(args: argparse.Namespace) -> int:
     LOGGER.info("launcher start pid=%s", os.getpid())
 
     try:
-        lock.acquire(timeout=10 if args.wait_for_lock else 0)
+        lock.acquire(timeout=10 if getattr(args, "wait_for_lock", False) else 0)
     except Timeout:
         LOGGER.info("existing launcher detected; reusing the running service")
         for _ in range(50):
