@@ -420,7 +420,7 @@ final result: passed
 
 # NEXORA Overview Command Center — Design QA (2026-11-25)
 
-- Reference: `C:/Users/zy/AppData/Local/Temp/codex-clipboard-b773050e-038a-42dd-aa14-9fe30fef5bdf.png`
+- Reference: user-supplied `codex-clipboard-b773050e-038a-42dd-aa14-9fe30fef5bdf.png` Overview mockup
 - Implementation capture: `artifacts/phase-1a-shell/desktop-1440-overview.png`
 - Compared state: connected Overview at 1440px desktop width
 
