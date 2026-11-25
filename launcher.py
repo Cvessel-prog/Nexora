@@ -299,6 +299,14 @@ def relaunch(vault: Path, runtime_dir: Path, args: argparse.Namespace) -> None:
 
 def launch(args: argparse.Namespace) -> int:
     state_dir = runtime_directory(args.runtime_dir)
+    if args.vault:
+        selected_vault = args.vault.expanduser().resolve()
+        try:
+            state_dir.relative_to(selected_vault)
+        except ValueError:
+            pass
+        else:
+            raise RuntimeError("Runtime 目录不能位于私人 Vault 内；请选择独立目录。")
     ensure_private_directory(state_dir)
     configure_logging(state_dir)
     runtime_file = state_dir / "runtime.json"
