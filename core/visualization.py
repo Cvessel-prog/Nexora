@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from collections import Counter
 from pathlib import Path
@@ -82,6 +83,100 @@ def timeline(root: Path, limit: int = 100) -> list[dict[str, Any]]:
             "preview": extract_summary(body) if can_preview else "",
         })
     return sorted(rows, key=lambda row: row["updated"] or row["created"], reverse=True)[:limit]
+
+
+def memory_graph(root: Path, statuses: set[str] | None = None, limit: int = 200) -> dict[str, Any]:
+    """Build a read-only graph from memories and their explicit tags only.
+
+    No similarity, shared-source, shared-type or inferred relationship becomes
+    an edge.  This keeps the visual projection honest without changing the
+    persisted Vault schema.
+    """
+    allowed = statuses or {"confirmed", "candidate"}
+    rows: list[tuple[dict[str, str], str]] = []
+    for _, path in _memory_files(root):
+        path = profile.safe_vault_file(root, path)
+        metadata, body = profile.read_record(path)
+        if metadata.get("status") not in allowed:
+            continue
+        rows.append((metadata, body))
+    rows.sort(key=lambda item: item[0].get("updated") or item[0].get("created") or "", reverse=True)
+    total = len(rows)
+    truncated = total > limit
+    rows = rows[:limit]
+
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    topics: dict[str, dict[str, Any]] = {}
+    for metadata, body in rows:
+        raw_tags = metadata.get("tags", "")
+        if isinstance(raw_tags, list):
+            tags = [str(value).strip() for value in raw_tags if str(value).strip()][:20]
+        else:
+            tags = [value.strip().strip("[]'\"") for value in str(raw_tags).split(",") if value.strip().strip("[]'\"")][:20]
+        status = metadata.get("status", "candidate")
+        record_id = metadata["id"]
+        nodes.append({
+            "id": record_id, "kind": "memory", "status": status,
+            "label": metadata.get("subject") or metadata.get("type", "note"),
+            "type": metadata.get("type", "note"), "sourceAgent": metadata.get("source_agent", "unknown"),
+            "created": metadata.get("created", ""), "updated": metadata.get("updated", ""),
+            "tags": tags, "preview": extract_summary(body)[:240], "reviewable": status == "candidate",
+        })
+        for tag in tags:
+            normalized = tag.casefold()
+            topic_id = f"topic-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]}"
+            topic = topics.setdefault(topic_id, {"id": topic_id, "kind": "topic", "label": tag, "memberCount": 0})
+            topic["memberCount"] += 1
+            edges.append({
+                "id": f"edge-{record_id}-{topic_id}", "kind": "explicit-tag",
+                "source": record_id, "target": topic_id,
+                "evidence": {"field": "tags", "value": tag},
+            })
+    nodes.extend(topics.values())
+    return {"nodes": nodes, "edges": edges, "total": total, "truncated": truncated, "relationshipBasis": "explicit-tags-only"}
+
+
+def memory_events(root: Path, limit: int = 100) -> dict[str, Any]:
+    """Return real lifecycle audit events plus labelled record-time fallbacks."""
+    from . import security
+
+    records: dict[str, dict[str, str]] = {}
+    for _, path in _memory_files(root):
+        metadata, _ = profile.read_record(profile.safe_vault_file(root, path))
+        records[metadata["id"]] = metadata
+
+    audit = security.query_events(root, resource_type="memory", page_size=min(max(limit, 1), 100))
+    events: list[dict[str, Any]] = []
+    covered: set[str] = set()
+    for event in audit["items"]:
+        record_id = str(event.get("details", {}).get("resourceId", ""))
+        metadata = records.get(record_id, {})
+        if record_id:
+            covered.add(record_id)
+        events.append({
+            "eventId": event["eventId"], "timestamp": event["timestamp"], "eventType": event["eventType"],
+            "origin": "audit", "clientId": event["clientId"], "result": event["result"],
+            "reasonCode": event["reasonCode"], "correlationId": event["correlationId"],
+            "memoryId": record_id, "status": metadata.get("status", ""),
+            "type": metadata.get("type", "protected"), "subject": metadata.get("subject", ""),
+            "sourceAgent": metadata.get("source_agent", event["clientId"]),
+        })
+    for record_id, metadata in records.items():
+        if record_id in covered:
+            continue
+        timestamp = metadata.get("updated") or metadata.get("created") or ""
+        if not timestamp:
+            continue
+        events.append({
+            "eventId": f"record-{record_id}", "timestamp": timestamp, "eventType": "memory.record_timestamp",
+            "origin": "record", "clientId": metadata.get("source_agent", "unknown"), "result": "allowed",
+            "reasonCode": "RECORD_TIMESTAMP", "correlationId": "", "memoryId": record_id,
+            "status": metadata.get("status", ""), "type": metadata.get("type", "protected"),
+            "subject": metadata.get("subject", ""), "sourceAgent": metadata.get("source_agent", "unknown"),
+        })
+    events.sort(key=lambda item: item["timestamp"], reverse=True)
+    return {"items": events[:limit], "integrity": audit["integrity"], "total": len(events)}
 
 
 def privacy_audit(root: Path) -> dict[str, Any]:

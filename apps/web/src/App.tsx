@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { BookOpen, CalendarDots, Database, GearSix, HardDrives, House, List, LockKey, Network, PlugsConnected, ShieldCheck, Sparkle, Stack, UserCircle, Warning, X } from '@phosphor-icons/react'
-import { ApiClient, ApiError, type Human3Trend, type Memory, type MemoryStats, type MonthlyOverview, type MonthlyReflection, type MonthlyTrend, type ProfileOverview, type ReflectionDimension, type ReflectionEvent, type ReflectionGoal, type SecurityCenter, type TimelineItem } from './api'
+import { ApiClient, ApiError, type Human3Trend, type Memory, type MemoryStats, type MonthlyOverview, type MonthlyReflection, type MonthlyTrend, type ProfileOverview, type ReflectionDimension, type ReflectionEvent, type ReflectionGoal, type SecurityCenter } from './api'
 import MemoryReviewPage from './MemoryReviewPage'
+import MemoryTimelinePage from './MemoryTimelinePage'
 import MonthlyReflectionPage from './MonthlyReflectionPage'
 import SecurityCenterPage from './SecurityCenterPage'
 import MonthlyTrendPage from './MonthlyTrendPage'
@@ -23,11 +24,14 @@ import relationshipMap from './assets/relationship-map.webp'
 import { localizedError, useLanguage, useT } from './i18n'
 import './App.css'
 
+// The graph engine is only downloaded when the Memory Graph route is opened.
+const MemoryGraphPage = lazy(() => import('./MemoryGraphPage'))
+
 type Notice = { kind: 'success' | 'error'; text: string } | null
-export type View = 'overview' | 'review' | 'profile' | 'timeline' | 'privacy' | 'reflection' | 'human3' | 'monthly' | 'growth' | 'backup' | 'connections' | 'import' | 'providers' | 'github' | 'data' | 'settings'
+export type View = 'overview' | 'graph' | 'review' | 'profile' | 'timeline' | 'privacy' | 'reflection' | 'human3' | 'monthly' | 'growth' | 'backup' | 'connections' | 'import' | 'providers' | 'github' | 'data' | 'settings'
 
 const VIEW_ROUTES: Record<View, string> = {
-  overview: '#/overview', review: '#/memory-review', profile: '#/profile',
+  overview: '#/overview', graph: '#/memory-graph', review: '#/memory-review', profile: '#/profile',
   timeline: '#/memory-timeline', privacy: '#/privacy-audit', reflection: '#/monthly-reflection',
   human3: '#/human-3', monthly: '#/monthly-trend', growth: '#/growth-dashboard', backup: '#/backup-recovery', connections: '#/ai-connections', providers: '#/providers', import: '#/import', github: '#/github-backup',
   data: '#/data', settings: '#/settings',
@@ -37,10 +41,10 @@ function viewFromHash(hash: string): View | null { return ROUTE_VIEWS.get(hash) 
 
 /** Navigation hubs own the navigation entry; their tabs stay reachable as routes. */
 const HUB_MEMBERS: Partial<Record<View, View[]>> = {
-  review: ['review', 'timeline'],
+  graph: ['graph', 'timeline', 'review'],
   reflection: ['reflection', 'monthly'],
   growth: ['growth', 'human3'],
-  data: ['data', 'backup', 'github', 'import'],
+  backup: ['data', 'backup', 'github', 'import'],
   connections: ['connections', 'providers'],
 }
 
@@ -62,11 +66,6 @@ type TokenGateProps = {
   error: string
   connecting: boolean
   onConnect: (token: string) => Promise<void>
-}
-
-function displayTime(value: string) {
-  if (!value) return '时间未知'
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
 function TokenGate({ error, connecting, onConnect }: TokenGateProps) {
@@ -118,7 +117,6 @@ function App() {
   const [closed, setClosed] = useState(false)
   const [view, setView] = useState<View>(() => viewFromHash(window.location.hash) ?? 'overview')
   const [profileView, setProfileView] = useState<ProfileOverview | null>(null)
-  const [timelineView, setTimelineView] = useState<TimelineItem[] | null>(null)
   const [securityView, setSecurityView] = useState<SecurityCenter | null>(null)
   const [clientCredential, setClientCredential] = useState('')
   const [human3View, setHuman3View] = useState<Human3Trend | null>(null)
@@ -202,7 +200,7 @@ function App() {
           setFirstRun(untouched)
         })
       }
-      setProfileView(null); setTimelineView(null); setSecurityView(null); setHuman3View(null); setMonthlyView(null); setReflectionView(null); setMonthlyTrendView(null)
+      setProfileView(null); setSecurityView(null); setHuman3View(null); setMonthlyView(null); setReflectionView(null); setMonthlyTrendView(null)
       setNotice(null)
     } catch (error) {
       if (controller.signal.aborted || epoch !== sessionEpoch.current) return
@@ -366,7 +364,7 @@ function App() {
     setNotice(null)
     window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${VIEW_ROUTES.review}`)
     setView('review')
-    setProfileView(null); setTimelineView(null); setSecurityView(null); setHuman3View(null); setMonthlyView(null); setReflectionView(null); setClientCredential('')
+    setProfileView(null); setSecurityView(null); setHuman3View(null); setMonthlyView(null); setReflectionView(null); setClientCredential('')
     setVisualLoading(null)
     setFirstRun(false)
     setGateError(message)
@@ -389,14 +387,13 @@ function App() {
     }
     setVisualLoading(null)
     if (next === 'review') { void loadCandidates(); return }
-    if (next === 'growth' || next === 'backup' || next === 'overview' || next === 'connections' || next === 'providers' || next === 'import' || next === 'github' || next === 'data' || next === 'settings') return
+    if (next === 'graph' || next === 'timeline' || next === 'growth' || next === 'backup' || next === 'overview' || next === 'connections' || next === 'providers' || next === 'import' || next === 'github' || next === 'data' || next === 'settings') return
     const controller = new AbortController()
     visualAbort.current = controller
     const epoch = sessionEpoch.current
     const request = viewRequest.current
     if (next === 'profile') setProfileView(null)
     if (next === 'reflection') { setReflectionView(null); setMonthlyView(null) }
-    if (next === 'timeline') setTimelineView(null)
     if (next === 'privacy') setSecurityView(null)
     if (next === 'human3') setHuman3View(null)
     if (next === 'monthly') setMonthlyTrendView(null)
@@ -404,14 +401,12 @@ function App() {
     try {
       const result = next === 'reflection' ? await client.monthlyOverview(controller.signal)
         : next === 'profile' ? await client.profileOverview(controller.signal)
-        : next === 'timeline' ? await client.timeline(controller.signal)
           : next === 'privacy' ? await client.securityCenter(controller.signal)
             : next === 'monthly' ? await client.monthlyTrend(controller.signal)
               : await client.human3Trend(controller.signal)
       if (epoch !== sessionEpoch.current || request !== viewRequest.current) return
       if (next === 'reflection') { const monthly = result as MonthlyOverview; setMonthlyView(monthly); setReflectionView(monthly.reflections.find((item) => item.month === monthly.currentMonth) ?? monthly.reflections[0] ?? null) }
       if (next === 'profile') setProfileView(result as ProfileOverview)
-      if (next === 'timeline') setTimelineView(result as TimelineItem[])
       if (next === 'privacy') setSecurityView(result as SecurityCenter)
       if (next === 'human3') setHuman3View(result as Human3Trend)
       if (next === 'monthly') setMonthlyTrendView(result as MonthlyTrend)
@@ -526,16 +521,11 @@ function App() {
 
   const navigationGroups: { title: string; items: { label: string; view: View; icon: typeof House }[] }[] = [
     {
-      title: t('nav.group.core'),
+      title: t('nav.group.workspace'),
       items: [
         { label: t('nav.overview'), view: 'overview', icon: House },
-        { label: t('nav.memory'), view: 'review', icon: Stack },
+        { label: t('nav.memory'), view: 'graph', icon: Stack },
         { label: t('nav.profile'), view: 'profile', icon: UserCircle },
-      ],
-    },
-    {
-      title: t('nav.group.records'),
-      items: [
         { label: t('nav.reflection'), view: 'reflection', icon: CalendarDots },
         { label: t('nav.growth'), view: 'growth', icon: Sparkle },
       ],
@@ -543,19 +533,18 @@ function App() {
     {
       title: t('nav.group.system'),
       items: [
-        { label: t('nav.data'), view: 'data', icon: HardDrives },
-        { label: t('nav.connections'), view: 'connections', icon: PlugsConnected },
         { label: t('nav.privacy'), view: 'privacy', icon: ShieldCheck },
-        { label: t('nav.settings'), view: 'settings', icon: GearSix },
+        { label: t('nav.backupShort'), view: 'backup', icon: HardDrives },
+        { label: t('nav.connectionsMcp'), view: 'connections', icon: PlugsConnected },
       ],
     },
   ]
   const titles: Record<View, string> = {
-    overview: t('title.overview'), review: t('title.memory'), profile: t('nav.profile'),
+    overview: t('title.overview'), graph: t('title.memory'), review: t('title.memory'), profile: t('nav.profile'),
     timeline: t('title.memory'), privacy: t('title.privacy'), reflection: t('title.reflection'),
     human3: t('title.growth'), monthly: t('title.reflection'), growth: t('title.growth'),
-    backup: t('title.data'), connections: t('title.connections'), providers: t('title.connections'),
-    import: t('title.data'), github: t('title.data'), data: t('title.data'), settings: t('title.settings'),
+    backup: t('title.backup'), connections: t('title.connections'), providers: t('title.connections'),
+    import: t('title.backup'), github: t('title.backup'), data: t('title.backup'), settings: t('title.settings'),
   }
 
   function closeNavigation() {
@@ -565,34 +554,39 @@ function App() {
 
   return <main className="app-shell">
     <a className="skip-link" href="#main-content" onClick={(event) => { event.preventDefault(); document.getElementById('main-content')?.focus() }}>{t('a11y.skipToContent')}</a>
-    <button ref={menuButtonRef} className="mobile-menu" aria-label="打开导航" aria-controls="primary-navigation" aria-expanded={navigationOpen} onClick={() => setNavigationOpen(true)}><List size={22} /></button>
-    {navigationOpen && <button className="navigation-scrim" aria-label="关闭导航" onClick={closeNavigation} />}
-    <aside ref={sidebarRef} id="primary-navigation" aria-label="主导航" className={`sidebar ${navigationOpen ? 'open' : ''}`}>
-      <div className="brand"><span className="brand-mark"><img src="/brand/nexora-symbol.svg" alt="" aria-hidden="true" /></span><div><strong>NEXORA <em>知序</em></strong><small>PERSONAL INTELLIGENCE</small></div><button className="drawer-close" aria-label="关闭导航" onClick={closeNavigation}><X /></button></div>
-      <nav aria-label="档案功能">
+    <button ref={menuButtonRef} className="mobile-menu" aria-label={t('a11y.openNavigation')} aria-controls="primary-navigation" aria-expanded={navigationOpen} onClick={() => setNavigationOpen(true)}><List size={22} /></button>
+    {navigationOpen && <button className="navigation-scrim" aria-label={t('a11y.closeNavigation')} onClick={closeNavigation} />}
+    <aside ref={sidebarRef} id="primary-navigation" aria-label={t('a11y.primaryNavigation')} className={`sidebar ${navigationOpen ? 'open' : ''}`}>
+      <div className="brand"><span className="brand-mark"><img src="/brand/nexora-symbol.svg" alt="" aria-hidden="true" /></span><div><strong>NEXORA <em>知序</em></strong><small>PERSONAL INTELLIGENCE</small></div><button className="drawer-close" aria-label={t('a11y.closeNavigation')} onClick={closeNavigation}><X /></button></div>
+      <nav aria-label={t('a11y.workspaceNavigation')}>
         {navigationGroups.map((group) => <div className="nav-group" key={group.title}>
           <p className="nav-group-title">{group.title}</p>
           {group.items.map((item) => { const Icon = item.icon; const active = navigationActive(item.view, view); return <button key={item.label} className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} onClick={() => { void openView(item.view); setNavigationOpen(false); if (item.view === view) window.requestAnimationFrame(() => titleRef.current?.focus({ preventScroll: true })) }}><Icon size={21} weight={active ? 'duotone' : 'regular'} /><span>{item.label}</span></button> })}
         </div>)}
       </nav>
-      <button className="concept-link" onClick={() => { setConceptOpen(true); setNavigationOpen(false) }}><BookOpen size={18} /><span>{t('concepts.open')}</span></button>
-      <div className="sidebar-status"><p><Database size={17} /><span>本地服务</span><strong>已连接</strong></p><p><LockKey size={17} /><span>Vault</span><strong>受保护</strong></p></div>
+      <div className="sidebar-footer">
+        <button className={`settings-link ${view === 'settings' ? 'active' : ''}`} aria-current={view === 'settings' ? 'page' : undefined} onClick={() => { void openView('settings'); setNavigationOpen(false) }}><GearSix size={20} weight={view === 'settings' ? 'duotone' : 'regular'} /><span>{t('nav.settings')}</span></button>
+        <button className="concept-link" onClick={() => { setConceptOpen(true); setNavigationOpen(false) }}><BookOpen size={18} /><span>{t('concepts.open')}</span></button>
+        <p className="sidebar-privacy-note"><LockKey size={16} /><span>{t('sidebar.localPrivate')}</span></p>
+      </div>
     </aside>
 
     <section ref={stageRef} id="main-content" className={`app-stage ${view === 'overview' ? 'with-status' : ''}`} tabIndex={-1} aria-label={t('a11y.main')}>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{navigationAnnouncement}</div>
-      <header className="topbar"><div><p className="eyebrow">HOLOGRAPHIC LIBRARY</p><h1 ref={titleRef} tabIndex={-1}>{titles[view]}</h1></div><div className="topbar-actions"><span className="service-status"><i />{t('topbar.localService')}</span><span className="service-status"><i />{t('topbar.vaultReady')}</span><button className="icon-button concept-button" aria-label={t('concepts.open')} title={t('concepts.open')} onClick={() => setConceptOpen(true)}><BookOpen size={19} /></button><button className="icon-button" aria-label={t('topbar.refreshCandidates')} title={t('topbar.refreshCandidates')} onClick={() => void loadCandidates()} disabled={loading}><Database size={19} /></button><button className="text-button" onClick={() => disconnect()}>{t('topbar.disconnect')}</button><button className="text-button danger-link" onClick={() => void shutdown()} disabled={saving}>{t('topbar.shutdown')}</button></div></header>
+      <header className="topbar"><div><p className="eyebrow">{t('shell.workspace')}</p><h1 ref={titleRef} tabIndex={-1}>{titles[view]}</h1></div><div className="topbar-actions"><span className="service-status"><i />{t('topbar.localService')}</span><button className="icon-button concept-button" aria-label={t('concepts.open')} title={t('concepts.open')} onClick={() => setConceptOpen(true)}><BookOpen size={19} /></button><button className="icon-button" aria-label={t('topbar.refreshCandidates')} title={t('topbar.refreshCandidates')} onClick={() => void loadCandidates()} disabled={loading}><Database size={19} /></button><button className="text-button" onClick={() => disconnect()}>{t('topbar.disconnect')}</button><button className="text-button danger-link" onClick={() => void shutdown()} disabled={saving}>{t('topbar.shutdown')}</button></div></header>
       <div className="content-shell">
         {externalChange && <div className="external-banner" role="status"><Warning size={20} /><span>{t('external.banner')}</span><button className="text-button" onClick={() => void refreshAfterExternal()}>{t('external.refresh')}</button><button className="text-button" onClick={() => setExternalChange(false)}>{t('external.dismiss')}</button></div>}
         {notice && <div className={`notice ${notice.kind}`} role="status"><span>{notice.text}</span>{notice.kind === 'error' && <button onClick={() => void loadCandidates()}>刷新数据</button>}</div>}
 
-        {(view === 'review' || view === 'timeline') && <>
+        {(view === 'graph' || view === 'review' || view === 'timeline') && <>
           <HubTabs label={t('title.memory')} description={t('hub.memory.desc')} tabs={[
-            { label: t('nav.review'), view: 'review', active: view === 'review' },
+            { label: t('nav.graph'), view: 'graph', active: view === 'graph' },
             { label: t('nav.timeline'), view: 'timeline', active: view === 'timeline' },
+            { label: t('nav.review'), view: 'review', active: view === 'review' },
           ]} onSelect={(next) => void openView(next)} />
+          {view === 'graph' && <Suspense fallback={<LoadingState label={t('memory.graph.chunkLoading')} />}><MemoryGraphPage client={client!} onImport={() => void openView('import')} onReview={(id) => { const memory = memories.find((item) => item.id === id); if (memory) { setSelectedId(memory.id); setDraft(memory.content); setRejectionReason('') } void openView('review') }} /></Suspense>}
           {view === 'review' && <MemoryReviewPage memories={memories} stats={memoryStats} selected={selected} draft={draft} rejectionReason={rejectionReason} loading={loading} saving={saving} onSelect={(memory) => { setSelectedId(memory.id); setDraft(memory.content); setRejectionReason('') }} onDraft={setDraft} onRejectionReason={setRejectionReason} onSave={save} onAct={act} onOnboarding={() => void openView('profile')} />}
-          {view === 'timeline' && <TimelinePage value={timelineView} loading={visualLoading === 'timeline'} />}
+          {view === 'timeline' && <MemoryTimelinePage client={client!} onReview={(id) => { const memory = memories.find((item) => item.id === id); if (memory) { setSelectedId(memory.id); setDraft(memory.content); setRejectionReason('') } void openView('review') }} />}
         </>}
         {(view === 'reflection' || view === 'monthly') && <>
           <HubTabs label={t('title.reflection')} description={t('hub.reflection.desc')} tabs={[
@@ -611,7 +605,7 @@ function App() {
           {view === 'human3' && <Human3Page value={human3View} loading={visualLoading === 'human3'} />}
         </>}
         {(view === 'data' || view === 'backup' || view === 'github' || view === 'import') && <>
-          <HubTabs label={t('title.data')} description={t('hub.data.desc')} tabs={[
+          <HubTabs label={t('title.backup')} description={t('hub.data.desc')} tabs={[
             { label: t('nav.backup'), view: 'backup', active: view === 'data' || view === 'backup' },
             { label: t('nav.github'), view: 'github', active: view === 'github' },
             { label: t('nav.import'), view: 'import', active: view === 'import' },
@@ -667,14 +661,6 @@ function ProfilePage({ value, loading, relationshipMap, onReview, onTimeline }: 
       </aside>
       <aside className="profile-inspector"><p className="eyebrow">NEXT ACTION</p><h3>{value.sections.length ? '继续完善档案' : '建立第一条长期信息'}</h3><p>{value.sections.length ? '审核新的候选记忆，让档案保持准确。' : '在审核页确认首次建档中愿意长期保留的信息。'}</p><button className="primary-action" onClick={onReview}><Stack size={18} />前往记忆审核</button><hr /><h3>确认优先</h3><p>候选、拒绝和归档记忆不会进入智能视图。</p><hr /><h3>本地优先</h3><p>内容保留在本地 Vault，页面不显示私人路径。</p></aside>
     </div>}
-  </section>
-}
-
-function TimelinePage({ value, loading }: { value: TimelineItem[] | null; loading: boolean }) {
-  const [open, setOpen] = useState<string | null>(null)
-  if (loading || !value) return <Loading />
-  return <section className="visual-page"><header className="compact-heading"><div><p className="eyebrow">MEMORY LIFECYCLE</p><p>未确认、denied 和 local-only 记录只显示元数据，不显示正文。</p></div></header>
-    <div className="timeline">{value.length === 0 ? <p className="muted">还没有记忆记录。</p> : value.map((item) => <article key={item.id}><span className={`dot status-${item.status}`} /><div><p className="timeline-meta">{displayTime(item.updated || item.created)} · {item.status} · {item.access}</p><h3>{item.subject || item.type}</h3><p>来源：{item.sourceAgent}</p>{item.previewAvailable && <button className="reveal" onClick={() => setOpen(open === item.id ? null : item.id)}>{open === item.id ? '收起摘要' : '查看确认摘要'}</button>}{open === item.id && <p className="preview">{item.preview}</p>}</div></article>)}</div>
   </section>
 }
 

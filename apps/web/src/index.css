@@ -13,7 +13,9 @@
   --color-success: #36d69a; --color-danger: #ff7892;
   --text-primary: #eaf2ff; --text-secondary: #91a3bc;
   --border-subtle: rgba(130,170,220,.16); --border-active: rgba(39,191,255,.62);
-  --radius-sm: 8px; --radius-md: 14px; --radius-lg: 20px; --sidebar-width: 264px;
+  --radius-sm: 8px; --radius-md: 14px; --radius-lg: 20px; --sidebar-width: 272px;
+  --space-page-x: clamp(18px, 3vw, 40px); --space-page-y: clamp(22px, 3vw, 36px);
+  --surface-glass: rgba(11, 20, 35, .88); --surface-raised: #111f33;
 }
 * { box-sizing: border-box; }
 html { color-scheme: dark; }
